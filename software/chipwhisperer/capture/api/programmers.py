@@ -273,7 +273,7 @@ class STM32FProgrammer(Programmer):
         super(STM32FProgrammer, self).__init__()
         self.supported_chips = supported_stm32f
         
-        self.slow_speed = False
+        self.slow_speed = True
         self.small_blocks = True
         self.stm = None
         
