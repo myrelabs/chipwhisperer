@@ -11,6 +11,18 @@ If you want to try this branch out, you'll need to:
 
 Other operating systems should work as is.
 
+## Additional USB1 information
+
+Important info/changes
+
+* NAEUSB uses NAEUSB_backend instead of serializer.
+    * There were a few calls that skipped serializer and talked directly to PyUSB so there's a few hacks in naeusb.py to deal with this: `write()` in NAEUSB and `read()` in NAEUSB_Backend.
+* Apparently no way to read serial number without opening device, so additional logic needed to handle this
+* `get_possible_devices()` is quite different now. It now returns a list of libusb devices that match vendor_id (and optionally product_id and serial_number). It should be possible to make it backwards compatable with the previous `get_possible_devices()`.
+* There's a few changes in higher level files to handle differences (mostly with `get_possible_devices`).
+* OpenADC will only work with CWLite for now (should be pretty easy to fix, just need to user product id to pick FPGA firmware to load)
+* Stream mode untested
+
 [Wiki](https://wiki.newae.com/V5:Main_Page) |[Documentation](https://chipwhisperer.readthedocs.io) |[Knowledge Base](https://wiki.newae.com/Category:Knowledge_Base) | [Forum](http://www.newae.com/forum) | [Store](https://store.newae.com) | [NewAE](http://newae.com)
 
 ChipWhisperer is an open source toolchain dedicated to hardware security research. This toolchain consists of several layers of open source components:
