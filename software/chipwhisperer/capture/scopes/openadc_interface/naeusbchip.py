@@ -68,12 +68,13 @@ class OpenADCInterface_NAEUSBChip(object):
             self.dev = CWL.CWLiteUSB()
 
             nae_products = [0xACE2, 0xACE3]
-            #possible_sn = self.dev.get_possible_devices(nae_products)
-            #handle = self.dev.get_possible_devices(nae_products)
+
+            #ugly hacks to get product ID
             self.dev.con(idProduct=nae_products, serial_number=sn)
-            self.cwFirmwareConfig[0xACE2].setInterface(self.dev.fpga)
+            self.last_id = self.dev.usbdev().usbtx.device.getProductID()
+            self.getFWConfig().setInterface(self.dev.fpga)
             try:
-                self.cwFirmwareConfig[0xACE2].loadFPGA()
+                self.getFWConfig().loadFPGA()
             except:
                 self.dev.dis()
                 self.dev.usbdev.close()

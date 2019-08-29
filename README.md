@@ -20,7 +20,7 @@ Important info/changes
 * Apparently no way to read serial number without opening device, so additional logic needed to handle this
 * `get_possible_devices()` is quite different now. It now returns a list of libusb devices that match vendor_id (and optionally product_id and serial_number). It should be possible to make it backwards compatable with the previous `get_possible_devices()`.
 * There's a few changes in higher level files to handle differences (mostly with `get_possible_devices`).
-* OpenADC will only work with CWLite for now (should be pretty easy to fix, just need to user product id to pick FPGA firmware to load)
+* OpenADC should work with PRO as well, but untested.
 * Stream mode untested
 
 [Wiki](https://wiki.newae.com/V5:Main_Page) |[Documentation](https://chipwhisperer.readthedocs.io) |[Knowledge Base](https://wiki.newae.com/Category:Knowledge_Base) | [Forum](http://www.newae.com/forum) | [Store](https://store.newae.com) | [NewAE](http://newae.com)

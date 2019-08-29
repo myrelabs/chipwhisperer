@@ -516,6 +516,8 @@ def get_cw_type(sn=None):
         return scopes.OpenADC
     elif name == "ChipWhisperer Nano":
         return scopes.CWNano
+    else:
+        raise OSError("Got chipwhisperer with unknown name {} (ID = {})".format(name, naelist_accessable[0].getProductID()))
 
 import time
 def better_delay(ms):
