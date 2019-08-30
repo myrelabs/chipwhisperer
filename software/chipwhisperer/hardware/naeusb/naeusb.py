@@ -33,7 +33,6 @@ import traceback
 import os
 import usb1
 
-from usb.backend import libusb0
 import usb.core
 import usb.util
 
@@ -74,164 +73,7 @@ NEWAE_PIDS = {
     0xC305: {'name': "CW305 Artix FPGA Board", 'fwver': fw_cw305.fwver},
 }
 
-class NAEUSB_Serializer_base(object):
-    """
-    Base clase for packaging USB commands. The seralizer class is used when the USB may talk via a daemon instead
-    of directly running from the Python code. This is useful when you want the USB device to be handled asynchronously,
-    such as required to keep serial data being sent to/from the device.
-    """
-
-    FLUSH_INPUT = 0xE0
-    CLOSE = 0xF0
-    OPEN = 0xF1
-    WRITE_CTRL = 0xF2
-    READ_CTRL = 0xF3
-    CMD_WRITE_MEM = 0xF4
-    CMD_READ_MEM = 0xF5
-    GET_POSSIBLE_DEVICES = 0xF6
-    WRITE_BULK = 0xF7
-    READ_BULK = 0xF8
-
-
-    ACK = 0xA0
-    ERROR = 0xA1
-
-    def make_cmd(self, cmd, datalist):
-
-        if datalist is None:
-            pcmd = None
-        else:
-            pcmd = pickle.dumps(datalist)
-
-        hdr = bytes(bytearray([cmd]))
-
-        if pcmd:
-            hdr += struct.pack("!I", len(pcmd))
-            cmdpacket = hdr + pcmd
-        else:
-            hdr += struct.pack("!I", 0)
-            cmdpacket = hdr
-
-        return cmdpacket
-
-class NAEUSB_Serializer(NAEUSB_Serializer_base):
-    """
-    This class does not talk to libusb directly, but instead uses a class that expects special commands passed
-    to it. The function which will process commands must be passed to the initilizer, which allows passing the
-    data over a network or similar.
-    """
-
-    def __init__(self, transmitfunc):
-
-        self.txrx = transmitfunc
-
-
-    def get_possible_devices(self, idProduct=None):
-        """Get a list of connected USB devices."""
-        cmdpacket = self.make_cmd(self.GET_POSSIBLE_DEVICES, idProduct)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-    def process_rx(self, inp):
-        """Process the data received back from the end, normally means find errors or return payload."""
-        resp = inp[0]
-
-        plen = struct.unpack("!I", inp[1:5])[0]
-
-        if plen > 0:
-
-            pdata = inp[5:]
-            if plen != len(pdata):
-                raise ValueError("This pickle smells funny")
-
-            payload = pickle.loads(pdata)
-        else:
-            payload = None
-
-
-        if resp == self.ERROR:
-            raise payload
-
-        return payload
-
-    def open(self, serial_number = None):
-        """Opens USB device"""
-        cmdpacket = self.make_cmd(self.OPEN, serial_number)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-    def close(self, serial_number):
-        """Close USB connection."""
-        cmdpacket = self.make_cmd(self.CLOSE, serial_number)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-    def sendCtrl(self, cmd, value=0, data=[]):
-        """
-        Send data over control endpoint
-        """
-        # Vendor-specific, OUT, interface control transfer
-
-        cmdpacket = [0x41, cmd, value, 0, len(data)]
-        cmdpacket.extend(data)
-
-        cmdpacket = self.make_cmd(self.WRITE_CTRL, cmdpacket)
-
-        self.process_rx(self.txrx(tx=cmdpacket))
-
-    def readCtrl(self, cmd, value=0, dlen=0):
-        """
-        Read data from control endpoint
-        """
-
-        cmdpacket = [0xC1, cmd, value, 0, dlen]
-        cmdpacket = self.make_cmd(self.READ_CTRL, cmdpacket)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-
-    def cmdReadMem(self, addr, dlen):
-        """
-        Send command to read over external memory interface from FPGA. Automatically
-        decides to use control-transfer or bulk-endpoint transfer based on data length.
-        """
-
-        dlen = int(dlen)
-        payload = [addr, dlen]
-        cmdpacket = self.make_cmd(self.CMD_READ_MEM, payload)
-
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-    def cmdWriteMem(self, addr, data):
-        """
-        Send command to write memory over external memory interface to FPGA. Automatically
-        decides to use control-transfer or bulk-endpoint transfer based on data length.
-        """
-
-        dlen = len(data)
-
-        payload = [addr]
-        payload.extend(data)
-        cmdpacket = self.make_cmd(self.CMD_WRITE_MEM, payload)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-    def writeBulk(self, data):
-        """
-        Low-level function.
-        Writes bulk data to the bulk USB endpoint.
-        :param data: Data to write to the endpoint
-        :return:
-        """
-        cmdpacket = self.make_cmd(self.WRITE_BULK, data)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-    def flushInput(self):
-        """
-        Of dubious value: flushes the USB endpoints. Causes slowdowns on MAC OS X, so need to investigate
-        the usefulness of this.
-        """
-
-        cmdpacket = self.make_cmd(self.FLUSH_INPUT, None)
-        return self.process_rx(self.txrx(tx=cmdpacket))
-
-
-class NAEUSB_Backend(NAEUSB_Serializer_base):
+class NAEUSB_Backend:
     """
     This backend actually talks to the USB device itself. It is designed to mostly be used via the serializer, but
     can be called directly too.
@@ -261,63 +103,59 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
 
         response = None
 
-        try:
-            #Get command
-            cmd = tx[0]
-            pickle_len = struct.unpack("!I", tx[1:5])[0]
+        #Get command
+        cmd = tx[0]
+        pickle_len = struct.unpack("!I", tx[1:5])[0]
 
-            if pickle_len > 0:
-                pickle_data = tx[5:]
+        if pickle_len > 0:
+            pickle_data = tx[5:]
 
-                if len(pickle_data) != pickle_len:
-                    raise ValueError("Pickle smells funny. Check best before date.")
+            if len(pickle_data) != pickle_len:
+                raise ValueError("Pickle smells funny. Check best before date.")
 
-                payload = pickle.loads(pickle_data)
-            else:
-                payload = None
+            payload = pickle.loads(pickle_data)
+        else:
+            payload = None
 
-            if cmd == self.READ_CTRL:
-                #response = self.usbdev().ctrl_transfer(payload[0], payload[1], payload[2], payload[3], payload[4], timeout=self._timeout)
-                response = self.handle.controlRead(payload[0], payload[1], payload[2], payload[3], payload[4], timeout=self._timeout)
-            elif cmd == self.WRITE_CTRL:
-                if payload[4] != len(payload[5:]):
-                    raise ValueError("Specified payload length & actual do not match")
-                #self.usbdev().ctrl_transfer(payload[0], payload[1], payload[2], payload[3], payload[5:], timeout=self._timeout)
-                self.usbdev().controlWrite(payload[0], payload[1], payload[2], payload[3], payload[5:], timeout=self._timeout)
-            elif cmd == self.CMD_READ_MEM:
-                addr = payload[0]
-                dlen = payload[1]
-                response = self.cmdReadMem(addr, dlen)
-            elif cmd == self.CMD_WRITE_MEM:
-                addr = payload[0]
-                data = payload[1:]
-                self.cmdWriteMem(addr, data)
-            elif cmd == self.GET_POSSIBLE_DEVICES:
-                response = self.get_possible_devices(payload)
-            elif cmd == self.OPEN:
-                response = self.open(serial_number=payload)
-            elif cmd == self.CLOSE:
-                self.close()
-            elif cmd == self.WRITE_BULK:
-                self.cmdWriteBulk(payload)
-            elif cmd == self.FLUSH_INPUT:
-                self.flushInput()
-            elif cmd == self.READ:
-                dlen = payload[0]
-                response = self.read(dlen)
-            else:
-                raise ValueError("Unknown Command: %02x"%cmd)
-        except Exception as e:
-            traceback.print_exc()
-            return self.make_cmd(self.ERROR, e)
+        if cmd == self.READ_CTRL:
+            #response = self.usbdev().ctrl_transfer(payload[0], payload[1], payload[2], payload[3], payload[4], timeout=self._timeout)
+            response = self.handle.controlRead(payload[0], payload[1], payload[2], payload[3], payload[4], timeout=self._timeout)
+        elif cmd == self.WRITE_CTRL:
+            if payload[4] != len(payload[5:]):
+                raise ValueError("Specified payload length & actual do not match")
+            #self.usbdev().ctrl_transfer(payload[0], payload[1], payload[2], payload[3], payload[5:], timeout=self._timeout)
+            self.usbdev().controlWrite(payload[0], payload[1], payload[2], payload[3], payload[5:], timeout=self._timeout)
+        elif cmd == self.CMD_READ_MEM:
+            addr = payload[0]
+            dlen = payload[1]
+            response = self.cmdReadMem(addr, dlen)
+        elif cmd == self.CMD_WRITE_MEM:
+            addr = payload[0]
+            data = payload[1:]
+            self.cmdWriteMem(addr, data)
+        elif cmd == self.GET_POSSIBLE_DEVICES:
+            response = self.get_possible_devices(payload)
+        elif cmd == self.OPEN:
+            response = self.open(serial_number=payload)
+        elif cmd == self.CLOSE:
+            self.close()
+        elif cmd == self.WRITE_BULK:
+            self.cmdWriteBulk(payload)
+        elif cmd == self.FLUSH_INPUT:
+            self.flushInput()
+        elif cmd == self.READ:
+            dlen = payload[0]
+            response = self.read(dlen)
+        else:
+            raise ValueError("Unknown Command: %02x"%cmd)
 
-        return self.make_cmd(self.ACK, response)
     def is_accessable(self, dev):
         try:
             dev.getSerialNumber()
             return True
         except:
             return False
+
     def open(self, serial_number=None, idProduct=None, connect_to_first=False):
         """
         Connect to device using default VID/PID
