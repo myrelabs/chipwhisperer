@@ -150,13 +150,13 @@ class USART(object):
 
         resp = []
 
-        while dlen and (timeout * 10) > 0:
+        timeout_end = time.clock() + (timeout / 1000)
+        while dlen and time.clock() < timeout_end:
             if waiting > 0:
                 newdata = self._usb.readCtrl(self.CMD_USART0_DATA, 0, min(waiting, dlen))
                 resp.extend(newdata)
                 dlen -= len(newdata)
             waiting = self.inWaiting()
-            timeout -= 1
 
         return resp
 

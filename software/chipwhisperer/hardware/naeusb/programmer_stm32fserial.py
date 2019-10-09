@@ -257,8 +257,8 @@ class STM32FSerial(object):
 
     def delay_func(self, ms_delay):
         """If using outside of GUI, can override this function"""
-        return
         #nonBlockingDelay(ms_delay)
+        time.sleep(ms_delay/1000)
 
     def setChip(self, chiptype):
         self._chip = chiptype
