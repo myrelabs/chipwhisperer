@@ -25,9 +25,7 @@ import traceback
 from .. import _qt as openadc_qt
 from chipwhisperer.capture.scopes.cwhardware.ChipWhispererFWLoader import CWLite_Loader, CW1200_Loader
 from chipwhisperer.capture.scopes.cwhardware.ChipWhispererFWLoader import FWLoaderConfig
-from chipwhisperer.common.utils.pluginmanager import Plugin
-from chipwhisperer.common.utils.parameter import Parameterized, Parameter
-from chipwhisperer.common.utils.util import DictType
+from chipwhisperer.common.utils.util import DictType, camel_case_deprecated
 
 try:
     from chipwhisperer.capture.scopes.cwhardware import ChipWhispererLite as CWL
@@ -42,7 +40,7 @@ except ImportError:
     logging.error("Could not import USB\n" + traceback.format_exc())
 
 
-class OpenADCInterface_NAEUSBChip(Parameterized, Plugin):
+class OpenADCInterface_NAEUSBChip(object):
     _name = "NewAE USB (CWLite/CW1200)"
 
     def __init__(self, oadcInstance):
@@ -68,7 +66,6 @@ class OpenADCInterface_NAEUSBChip(Parameterized, Plugin):
     def con(self, sn=None):
         if self.ser is None:
             self.dev = CWL.CWLiteUSB()
-            self.getParams().append(self.dev.getParams())
 
             try:
                 nae_products = [0xACE2, 0xACE3]
@@ -80,11 +77,13 @@ class OpenADCInterface_NAEUSBChip(Parameterized, Plugin):
                         snlist = DictType({'Select Device to Connect':None})
                         for d in possible_sn:
                             snlist[str(d['sn']) + " (" + str(d['product']) + ")"] = d['sn']
-                            serial_numbers.append(f"sn = {str(d['sn'])} ({str(d['product'])})")
+                            serial_numbers.append("sn = {} ({})".format(str(d['sn']), str(d['product'])))
                             pass
                         raise Warning("Multiple ChipWhisperers detected. Please specify device from the following list using cw.scope(sn=<SN>): \n{}".format(serial_numbers))
                 else:
-                    sn = None
+                    pass
+                    #if possible_sn[0]['sn'] !=
+                    #sn = None
                 found_id = self.dev.con(idProduct=nae_products, serial_number=sn)
             except (IOError, ValueError):
                 raise Warning('Could not connect to "%s". It may have been disconnected, is in an error state, or is being used by another tool.' % self.getName())
@@ -128,3 +127,8 @@ class OpenADCInterface_NAEUSBChip(Parameterized, Plugin):
             return self.cwFirmwareConfig[self.last_id]
         except KeyError as e:
             return FWLoaderConfig(CWLite_Loader())
+
+    def get_name(self):
+        return self._name
+
+    getName = camel_case_deprecated(get_name)

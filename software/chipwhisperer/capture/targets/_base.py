@@ -25,20 +25,14 @@
 
 from chipwhisperer.capture.api.programmers import Programmer
 from chipwhisperer.common.utils import util
-from chipwhisperer.common.utils.pluginmanager import Plugin
-
-try:
-    from Crypto.Cipher import AES
-except ImportError:
-    AES = None
 
 
-class TargetTemplate(Plugin):
+class TargetTemplate:
     _name = 'Target Connection'
+    connectStatus=False
 
     def __init__(self):
-        self.newInputData = util.Signal()
-        self.connectStatus = util.Observable(False)
+        pass
 
     def setSomething(self):
         """Here you would send value to the reader hardware"""
@@ -49,18 +43,19 @@ class TargetTemplate(Plugin):
         self.close()
 
     def getStatus(self):
-        return self.connectStatus.value()
+        return self.connectStatus
 
     def dis(self):
         """Disconnect from target"""
         self.close()
-        self.connectStatus.setValue(False)
+        self.connectStatus = False
+
 
     def con(self, scope=None, **kwargs):
         """Connect to target"""
         Programmer.lastFlashedFile = "unknown"
         try:
-            self.connectStatus.setValue(True)
+            self.connectStatus = True
             self._con(scope, **kwargs)
         except:
             self.dis()
@@ -81,7 +76,7 @@ class TargetTemplate(Plugin):
     def init(self):
         """Init Hardware"""
         pass
-    
+
     def reinit(self):
         pass
 
@@ -102,7 +97,7 @@ class TargetTemplate(Plugin):
         return text
 
     def loadEncryptionKey(self, key):
-        """Load desired encryption key"""        
+        """Load desired encryption key"""
         self.key = key
 
     def loadInput(self, inputtext):
@@ -113,7 +108,7 @@ class TargetTemplate(Plugin):
         """If encryption takes some time after 'go' called, lets user poll if done"""
         return True
 
-    def readOutput(self):        
+    def readOutput(self):
         """Read result"""
         raise NotImplementedError("Target \"" + self.getName() + "\" does not implement method " + self.__class__.__name__ + ".readOutput()")
 
@@ -131,15 +126,15 @@ class TargetTemplate(Plugin):
 
     def getExpected(self):
         """Based on key & text get expected if known, otherwise returns None"""
-        
         # e.g. for AES we can do this:
-        if AES and hasattr(self, 'key') and hasattr(self, 'input') and self.input and self.key:
+        return None
+        """if AES and hasattr(self, 'key') and hasattr(self, 'input') and self.input and self.key:
             cipher = AES.new(bytes(self.key), AES.MODE_ECB)
             ct = cipher.encrypt(bytes(self.input))
             ct = bytearray(ct)
             return ct
         else:
-            return None
+            return None"""
 
     def validateSettings(self):
         # return [("warn", "Target Module", "You can't use module \"" + self.getName() + "\"", "Specify other module", "57a3924d-3794-4ca6-9693-46a7b5243727")]

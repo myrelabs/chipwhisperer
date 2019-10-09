@@ -32,9 +32,38 @@ from ._base import TargetTemplate
 from .simpleserial_readers.cwlite import SimpleSerial_ChipWhispererLite
 from chipwhisperer.common.utils import util
 from collections import OrderedDict
+from chipwhisperer.common.utils.util import camel_case_deprecated
 
 
 class SimpleSerial(TargetTemplate, util.DisableNewAttr):
+    """SimpleSerial target object.
+
+    This class contains the public API for a target that uses serial
+    communication.
+
+    The easiest way to connect to the target is::
+
+        import chipwhisperer as cw
+        scope = cw.scope()
+        target = cw.target(scope)
+
+    The target is automatically connected to if the default configuration
+    adequate.
+
+    For more help use the help() function with one of the submodules
+    (target.baud, target.write, target.read, ...).
+
+      * :attr:`target.baud <.SimpleSerial.baud>`
+      * :meth:`target.write <.SimpleSerial.write>`
+      * :meth:`target.read <.SimpleSerial.read>`
+      * :meth:`target.simpleserial_wait_ack <.SimpleSerial.simpleserial_wait_ack>`
+      * :meth:`target.simpleserial_write <.SimpleSerial.simpleserial_write>`
+      * :meth:`target.simpleserial_read <.SimpleSerial.simpleserial_read>`
+      * :meth:`target.set_key <.SimpleSerial.set_key>`
+      * :meth:`target.close <.SimpleSerial.close>`
+      * :meth:`target.con <.SimpleSerial.con>`
+
+    """
     _name = "Simple Serial"
 
     def __init__(self):
@@ -54,6 +83,7 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         self.initmask = '1F 70 D6 3C 23 EB 1A B8 6A D5 E2 0D 5F D9 58 A3 CA 9D'
         self._mask = util.hexStrToByteArray(self.initmask)
         self.protformat = 'hex'
+        self.last_key = bytearray(16)
 
         # Preset lists are in the form
         # {'Dropdown Name':['Init Command', 'Load Key Command', 'Load Input Command', 'Go Command', 'Output Format']}
@@ -262,12 +292,12 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         capturing a trace. If the format doesn't match, an error is logged.
 
         This format string can contain two special strings:
-        - "$RESPONSE$": If the format contains $RESPONSE$, then this part of
-          the received text is converted to the output text (ciphertext or
-          similar). The length of this response string is given in outputLen()
-          and set by setOutputLen().
-        - "$GLITCH$": If the format starts with $GLITCH$, then all output is
-          redirected to the glitch explorer.
+          * "$RESPONSE$": If the format contains $RESPONSE$, then this part of
+            the received text is converted to the output text (ciphertext or
+            similar). The length of this response string is given in outputLen()
+            and set by setOutputLen().
+          * "$GLITCH$": If the format starts with $GLITCH$, then all output is
+            redirected to the glitch explorer.
 
         Getter: Return the current output format
 
@@ -322,14 +352,13 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
     def baud(self):
         """The current baud rate of the serial connection.
 
-        This property is only compatible with the ChipWhisperer-Lite serial
-        connection - using it with a different connection raises an
-        AttributeError.
+        :Getter: Return the current baud rate.
 
-        Getter: Return the current baud rate.
+        :Setter: Set a new baud rate. Valid baud rates are any integer in the
+            range [500, 2000000].
 
-        Setter: Set a new baud rate. Valid baud rates are any integer in the
-                range [500, 2000000].
+        Raises:
+            AttributeError: Target doesn't allow baud to be changed.
         """
         if hasattr(self.ser, 'baud') and callable(self.ser.baud):
             return self.ser.baud()
@@ -398,14 +427,11 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
 
     def setConnection(self, con):
         self.ser = con
-
-        self.ser.connectStatus.setValue(False)
-        self.ser.connectStatus.connect(self.connectStatus.emit)
+        self.ser.connectStatus = self.connectStatus
         self.ser.selectionChanged()
 
     def _con(self, scope = None):
         if not scope or not hasattr(scope, "qtadc"): Warning("You need a scope with OpenADC connected to use this Target")
-        scope.scope_disconnected_signal.connect(self.dis)
         self.outstanding_ack = False
 
         self.ser.con(scope)
@@ -473,7 +499,7 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         return s
 
     def runCommand(self, cmdstr, flushInputBefore=True):
-        if self.connectStatus.value()==False:
+        if self.connectStatus==False:
             raise Warning("Can't write to the target while disconected. Connect to it first.")
 
         if cmdstr is None or len(cmdstr) == 0:
@@ -494,7 +520,7 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         varList = [("$KEY$",self.key, "Hex Encryption Key"),
                    ("$TEXT$",self.input, "Input Plaintext"),
                    ("$MASK$",self._mask, "Mask"),
-                   ("$EXPECTED$", self.getExpected(), "Expected Ciphertext")]
+                   ("$EXPECTED$", None, "Expected Ciphertext")]
 
         newstr = cmdstr
 
@@ -524,11 +550,19 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
             self.outstanding_ack = True
 
     def loadEncryptionKey(self, key):
+        """ Updates encryption key on target.
+
+        The key is updated in this object and sent to the target over serial.
+        """
         self.key = key
         if self.key:
             self.runCommand(self._key_cmd)
 
     def loadInput(self, inputtext):
+        """ Sends plaintext to target
+
+        Also updates the internal plaintext
+        """
         self.input = inputtext
         self.runCommand(self._input_cmd)
 
@@ -536,7 +570,7 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         self.mask = mask
         self.runCommand(self._mask_cmd)
 
-    def isDone(self):
+    def is_done(self):
         return True
 
     def readOutput(self):
@@ -568,7 +602,7 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
 
         # If the protocol format is bin convert is back to hex for handling by CW
         if self.protformat == "bin":
-            response = binascii.hexlify(response)
+            response = binascii.hexlify(response.encode('latin1'))
 
         if len(response) < dataLen:
             logging.warning('Response length from target shorter than expected (%d<%d): "%s".' % (len(response), dataLen, response))
@@ -580,7 +614,8 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         #Is a beginning part
         if len(expected[0]) > 0:
             if response[0:len(expected[0])] != expected[0]:
-                logging.warning("Sync Error: %s"%response)
+                logging.warning("Response start doesn't match what was expected:")
+                logging.warning("Got {}, Expected {} + data".format(response, expected[0]))
                 logging.warning("Hex Version: %s" % (" ".join(["%02x" % ord(t) for t in response])))
 
                 return None
@@ -602,7 +637,8 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         #Is end part?
         if len(expected[1]) > 0:
             if response[startindx:startindx+len(expected[1])] != expected[1]:
-                logging.warning("Sync Error: %s"%response)
+                logging.warning("Unexpected end to response:")
+                logging.warning("Got: {}, Expected {}".format(response, expected[1]))
                 return None
 
         return data
@@ -652,7 +688,233 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
 
     def getExpected(self):
         """Based on key & text get expected if known, otherwise returns None"""
+        return None
         if self.textLen() == 16:
             return TargetTemplate.getExpected(self)
         else:
             return None
+
+    def write(self, data):
+        """ Writes data to the target over serial.
+
+        Args:
+            data (str): Data to write over serial.
+
+        Raises:
+            Warning: Target not connected
+
+        .. versionadded:: 5.1
+            Added target.write()
+        """
+        if not self.connectStatus:
+            raise Warning("Target not connected")
+
+        try:
+            self.ser.write(data)
+        except USBError:
+            self.dis()
+            raise Warning("Error in target. It may have been disconnected")
+        except Exception as e:
+            self.dis()
+            raise e
+
+    def read(self, num_char = 0, timeout = 250):
+        """ Reads data from the target over serial.
+
+        Args:
+            num_char (int, optional): Number of byte to read. If 0, read all
+                data available. Defaults to 0.
+            timeout (int, optional): How long in ms to wait before returning.
+                If 0, block until data received. Defaults to 250.
+
+        Returns:
+            String of received data.
+
+        .. versionadded:: 5.1
+            Added target.read()
+        """
+        if not self.connectStatus:
+            raise Warning("Target not connected")
+        try:
+            if num_char == 0:
+                num_char = self.ser.inWaiting()
+            return self.ser.read(num_char, timeout)
+        except USBError:
+            self.dis()
+            raise Warning("Error in target. It may have been disconnected")
+        except Exception as e:
+            self.dis()
+            raise e
+
+
+    def simpleserial_wait_ack(self, timeout=500):
+        """Waits for an ack from the target for timeout ms
+
+        Args:
+            timeout (int, optional): Time to wait for an ack in ms. If 0, block
+                until we get an ack. Defaults to 500.
+
+
+        Raises:
+            Warning: Target not connected.
+
+        .. versionadded:: 5.1
+            Added target.simpleserial_wait_ack
+        """
+
+        data = self.read(4, timeout = timeout)
+        if len(data) > 1:
+            if data[0] != 'z':
+                logging.error("Ack error: {}".format(data))
+                return False
+        else:
+            logging.error("Target did not ack")
+            return False
+        return True
+
+    def simpleserial_write(self, cmd, num, end='\n'):
+        """ Writes a simpleserial command to the target over serial.
+
+        Writes 'cmd' + ascii(num) + 'end' over serial. Flushes the read and
+        write buffers before writing.
+
+        Args:
+            cmd (str): String to start the simpleserial command with. For
+                'p'.
+            num (bytearray): Number to write as part of command. For example,
+                the 16 byte plaintext for the 'p' command. Converted to ascii
+                before being sent.
+            end (str, optional): String to end the simpleserial command with.
+                Defaults to '\\n'.
+
+        Example:
+            Sending a 'p' command::
+
+                key, pt = ktp.new_pair()
+                target.simpleserial_write('p', pt)
+
+        Raises:
+            Warning: Write attempted while disconnected or error during write.
+
+        .. versionadded:: 5.1
+            Added target.simpleserial_write()
+        """
+        self.ser.flush()
+        cmd += binascii.hexlify(num).decode() + end
+        self.write(cmd)
+
+    def simpleserial_read(self, cmd, pay_len, end='\n', timeout=250, ack=True):
+        r""" Reads a simpleserial command from the target over serial.
+
+        Reads a command starting with <start> with an ASCII encoded bytearray
+        payload of length exp_len*2 (i.e. exp_len=16 for an AES128 key) and
+        ending with <end>. Converts the payload to a bytearray. Will ignore
+        non-ASCII bytes in the payload, but warn the user of them.
+
+        Args:
+            cmd (str): Expected start of the command. Will warn the user if
+                the received command does not start with this string.
+            pay_len (int): Expected length of the returned bytearray in number
+                of bytes. Note that SimpleSerial commands send data as ASCII;
+                this is the length of the data that was encoded.
+            end (str, optional): Expected end of the command. Will warn the
+                user if the received command does not end with this string.
+                Defaults to '\n'
+            timeout (int, optional): Value to use for timeouts during reads in
+                ms. If 0, block until all expected data is returned. Defaults
+                to 250.
+            ack (bool, optional): Expect an ack at the end for SimpleSerial
+                >= 1.1. Defaults to True.
+
+        Returns:
+            The received payload as a bytearray or None if the read failed.
+
+        Example:
+            Reading ciphertext back from the target after a 'p' command::
+
+                ct = target.simpleserial_read('r', 16)
+
+        Raises:
+            Warning: Device did not ack or error during read.
+
+        .. versionadded:: 5.1
+            Added target.simpleserial_read()
+        """
+        cmd_len = len(cmd)
+        ascii_len = pay_len * 2
+        recv_len = cmd_len + ascii_len + len(end)
+        response = self.read(recv_len, timeout=timeout)
+
+        payload = bytearray(pay_len)
+        if cmd_len > 0:
+            if response[0:cmd_len] != cmd:
+                logging.warning("Unexpected start to command: {}".format(
+                    response[0:cmd_len]
+                ))
+                return None
+        idx = cmd_len
+        for i in range(0, pay_len):
+            try:
+                payload[i] = int(response[idx:(idx + 2)], 16)
+            except ValueError as e:
+                logging.warning("ValueError: {}".format(e))
+            idx += 2
+
+        if len(end) > 0:
+            if response[(idx):(idx + len(end))] != end:
+                logging.warning("Unexpected end to command: {}".format(
+                    response[(idx):(idx+len(end))]))
+                return None
+
+        if ack:
+            self.simpleserial_wait_ack(timeout)
+
+        return payload
+
+    def set_key(self, key, ack=True, timeout=250):
+        """Checks if key is different than the last one sent. If so, send it.
+
+        Uses simpleserial_write('k')
+
+        Args:
+            key (bytearray): key to send
+            ack (bool, optional): Wait for ack after sending key. Defaults to
+                True.
+            timeout (int, optional): How long in ms to wait for the ack.
+                Defaults to 250.
+
+        Raises:
+            Warning: Device did not ack or error during read.
+
+        .. versionadded:: 5.1
+            Added target.set_key()
+        """
+        if self.last_key != key:
+            self.last_key = key
+            self.simpleserial_write('k', key)
+            if ack:
+                self.simpleserial_wait_ack(timeout)
+
+    def in_waiting(self):
+        """Returns the number of characters available from the serial buffer.
+
+        Returns:
+            The number of characters available via a target.read() call.
+
+        .. versionadded:: 5.1
+            Added target.in_waiting()
+        """
+        return self.ser.inWaiting()
+
+    inWaiting = camel_case_deprecated(in_waiting)
+
+    def flush(self):
+        """Removes all data from the serial buffer.
+
+        .. versionadded:: 5.1
+            Added target.flush()
+        """
+        self.ser.flush()
+
+
+

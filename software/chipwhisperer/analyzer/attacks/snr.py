@@ -26,55 +26,55 @@
 #=================================================
 
 import numpy as np
+from chipwhisperer.common.api.ProjectFormat import Project
+from chipwhisperer.common.traces import Trace
 
-def calculate_snr(trace_manager, leak_model, bnum=0, db=True, trace_data=None, textin_data=None, textout_data=None, key_data=None):
-    """Calculate the SNR based on the leakage model. Uses same leakage model as the CPA attack."""
-    
+
+def calculate_snr(input, leak_model, bnum=0, db=True):
+    """Calculate the SNR based on the leakage model.
+
+    Uses same leakage model as the CPA attack.
+
+    Args:
+        input (Iterable of :class:`Traces <chipwhisperer.common.traces.Trace>`): An iterable of traces.
+        leak_model (ModelsBase): A leakage model selected from
+            :data:`leakage_models <chipwhisperer.analyzer.leakage_models>`.
+        bnum (int): Byte number used for leakage model.
+        bd (bool): Return signal-to-noise ratio in decibals.
+    """
+
     textin = None
     textout = None
     key = None
     trace = None
-    
+
     hwarray = []
-    
-    if trace_manager:        
-        ntrace = trace_manager.numTraces()
-        npoints = trace_manager.numPoints()
-    else:
-        ntrace = len(trace_data)
-        npoints = len(trace_data[0])
-    
+
+    tm = None
+
+    ntrace = len(input)
+    npoints = len(input[0].wave)
+
     for tnum in range(0, ntrace):
-    
-        if trace_manager is None:
-            if trace_data:
-                trace = trace_data[tnum]
-            if textin_data:
-                textin = textin_data[tnum]
-            if textout_data:
-                textout = textout_data[tnum]
-            if key_data:
-                key = key_data[tnum]
-        else:
-            trace = trace_manager.getTrace(tnum)
-            textin = trace_manager.getTextin(tnum)
-            textout = trace_manager.getTextout(tnum)
-            key = trace_manager.getKnownKey(tnum)
-    
+        trace = input[tnum].wave
+        textin = input[tnum].textin
+        textout = input[tnum].textout
+        key = input[tnum].key
+
         state = {'knownkey':key}
-    
+
         leakage = leak_model.leakage(textin, textout, None, bnum, state)
-        
+
         while leakage >= len(hwarray):
             hwarray.append([])
-            
+
         hwarray[leakage].append(trace)
-        
+
     hwmean = np.zeros((len(hwarray), npoints))
-    
+
     for i in range(0, len(hwarray)):
         hwmean[i] = np.mean(hwarray[i], axis=0)
-        
+
     inc_list = []
     best_choice = -1
     best_choice_len = 0
@@ -86,7 +86,7 @@ def calculate_snr(trace_manager, leak_model, bnum=0, db=True, trace_data=None, t
             if num_elements > best_choice_len:
                 best_choice = i
                 best_choice_len = num_elements
-            
+
 
     hwmean_valid = hwmean[inc_list]
 
@@ -94,9 +94,8 @@ def calculate_snr(trace_manager, leak_model, bnum=0, db=True, trace_data=None, t
     noise_var_onehw = np.var(hwarray[best_choice], axis=0)
 
     snr = signal_var / noise_var_onehw
-    
+
     if db:
         return 20*np.log(snr)
-    
+
     return snr
-    

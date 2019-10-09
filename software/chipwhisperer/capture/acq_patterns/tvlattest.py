@@ -25,16 +25,22 @@
 import logging
 import random
 from chipwhisperer.common.utils import util
+from chipwhisperer.analyzer.utils.aes_funcs import key_schedule_rounds
+from chipwhisperer.common.utils.aes_cipher import AESCipher
 from ._base import AcqKeyTextPattern_Base
 
-try:
-    from Crypto.Cipher import AES
-except ImportError:
-    logging.warn('T-test inputs: no AES module found. Using pseudorandom plaintexts instead')
-    AES = None
-
-
 class AcqKeyTextPattern_TVLATTest(AcqKeyTextPattern_Base):
+    """Class for getting key and text for TVLA T-Tests.
+
+    Basic usage::
+
+        import chipwhisperer as cw
+        ktp = cw.ktp.TVLATTest()
+        ktp.init(num_traces) # init with the number of traces you plan to
+                             # capture
+        key, text = ktp.next()
+
+    """
     _name = "TVLA Rand vs Fixed"
     _description = "Welsh T-Test with random/fixed plaintext."
 
@@ -43,23 +49,26 @@ class AcqKeyTextPattern_TVLATTest(AcqKeyTextPattern_Base):
         self._interleavedPlaintext = []
         self._key = []
 
-        self.getParams().addChildren([
-            {'name':'Encryption Key', 'key':'key', 'type':'str', 'value':"", 'readonly':True},
-            {'name':'Interleaved Plaintext', 'key':'text', 'type':'str', 'value':"", 'readonly':True},
-        ])
 
         self.setTarget(target)
 
     def _initPattern(self):
         pass
 
-    def initPair(self, maxtraces):
+    def init(self, maxtraces):
+        """Initialize key text pattern for a specific number of traces.
+
+        Args:
+            maxtraces (int): Number of traces to initialize for.
+
+        Raises:
+            ValueError: Invalid key length
+        """
         length = self.keyLen()
         if length <= 32:
             self._key = util.hexStrToByteArray("01 23 45 67 89 ab cd ef 12 34 56 78 9a bc de f0 23 45 67 89 ab cd ef 01 34 56 78 9a bc de f0 12")[:length]
         else:
             raise ValueError("Invalid key length: %d bytes" % length)
-        self.findParam("key").setValue(" ".join(["%02X"%b for b in self._key]), init=True)
 
         self._textin1 = util.hexStrToByteArray("00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00")
 
@@ -71,12 +80,11 @@ class AcqKeyTextPattern_TVLATTest(AcqKeyTextPattern_Base):
             self._interleavedPlaintext = util.hexStrToByteArray("da 39 a3 ee 5e 6b 4b 0d 32 55 bf ef 95 60 18 95")
         else:
             raise ValueError("Invalid key length: %d bytes" % length)
-        self.findParam("text").setValue(" ".join(["%02X" % b for b in self._interleavedPlaintext]), init=True)
 
         self.num_group1 = int(maxtraces/2)
         self.num_group2 = int(maxtraces - self.num_group1)
 
-    def newPair(self):
+    def new_pair(self):
         rand = random.random()
         num_tot = self.num_group1 + self.num_group2
         if num_tot == 0:
@@ -88,15 +96,27 @@ class AcqKeyTextPattern_TVLATTest(AcqKeyTextPattern_Base):
         if group1:
             self._textin = self._textin1
 
-            if AES is not None:
-                cipher = AES.new(bytes(self._key), AES.MODE_ECB)
-                self._textin1 = bytearray(cipher.encrypt(bytes(self._textin1)))
-            else:
-                self._textin1 = bytearray(16)
-                for i in range(0, 16):
-                    self._textin1[i] = random.randint(0, 255)
-                if self.num_group1 > 0:
-                    self.num_group1 -= 1
+            exp_key = list(self._key)
+            rounds = 0
+            keylen = self.keyLen()
+
+            if keylen == 16:
+                rounds = 10
+            elif keylen == 24:
+                rounds = 12
+            elif keylen == 32:
+                rounds = 14
+
+            #expand key
+            for i in range(1, rounds+1):
+                exp_key.extend(key_schedule_rounds(list(self._key), 0, i))
+
+            cipher = AESCipher(exp_key)
+            self._textin1 = bytearray(cipher.cipher_block(list(self._textin1)))
+
+            if self.num_group1 > 0:
+                self.num_group1 -= 1
+
         else:
             self._textin = self._interleavedPlaintext
             if self.num_group2 > 0:
@@ -106,3 +126,16 @@ class AcqKeyTextPattern_TVLATTest(AcqKeyTextPattern_Base):
         self.validateKey()
 
         return self._key, self._textin
+
+    def next(self):
+        """Returns the next key text pair
+
+        Updates last key and text
+
+        Returns:
+            (key (bytearray), text (bytearray))
+
+        .. versionadded:: 5.1
+            Added next
+        """
+        return self.new_pair()

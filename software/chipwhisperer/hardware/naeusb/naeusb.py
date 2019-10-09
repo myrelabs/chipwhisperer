@@ -23,12 +23,14 @@
 # United States of America, the European Union, and other jurisdictions.
 # ==========================================================================
 import logging
+import warnings
 import time
 import math
 from threading import Condition, Thread
 import struct
 import pickle
 import traceback
+import os
 
 from usb.backend import libusb0
 import usb.core
@@ -247,7 +249,7 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
     def usbdev(self):
         """Safely get USB device, throwing error if not connected"""
 
-        if not self._usbdev: raise Warning("USB Device not found. Did you connect it first?")
+        if not self._usbdev: raise OSError("USB Device not found. Did you connect it first?")
         return self._usbdev
 
     def txrx(self, tx=[]):
@@ -297,6 +299,9 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
                 self.cmdWriteBulk(payload)
             elif cmd == self.FLUSH_INPUT:
                 self.flushInput()
+            elif cmd == self.READ:
+                dlen = payload[0]
+                response = self.read(dlen)
             else:
                 raise ValueError("Unknown Command: %02x"%cmd)
         except Exception as e:
@@ -315,7 +320,7 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
         snlist = "".join(snlist)
 
         if len(devlist) == 0:
-            raise Warning("Failed to find USB Device")
+            raise OSError("Failed to find USB Device")
 
         elif serial_number:
             dev = None
@@ -325,7 +330,7 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
                     break
 
             if dev is None:
-                raise Warning("Failed to find USB device with S/N %s\n. Found S/N's:\n" + snlist)
+                raise OSError("Failed to find USB device with S/N %s\n. Found S/N's:\n" + snlist)
 
         elif len(devlist) == 1:
             dev = devlist[0]
@@ -340,7 +345,7 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
             dev.set_configuration(0)
             dev.set_configuration()
         except ValueError:
-            raise IOError("NAEUSB: Could not configure USB device")
+            raise OSError("NAEUSB: Could not configure USB device")
 
         # Get serial number
         try:
@@ -381,36 +386,51 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
         """
         Get a list of matching devices being based a list of PIDs. Returns list of usbdev that match (or empty if none)
         """
-
-        devlist = []
-
         if idProduct is None:
             idProduct = [None]
-        
-        
-        libusb_backend = libusb0.get_backend()
-        for _ in range(2): #1 try for each backend
-            try:
-                for id in idProduct:
-                    if id:
-                        dev = list(usb.core.find(find_all=True, idVendor=0x2B3E, idProduct=id, backend=libusb_backend))
-                    else:
-                        dev = list(usb.core.find(find_all=True, idVendor=0x2B3E, backend=libusb_backend))
-                    if len(dev) > 0:
+
+        my_kwargs={}
+        if os.name == "nt":
+            #on windows, need to manually load libusb because of 64bit python loading the wrong one
+            libusb_backend = libusb0.get_backend(find_library=lambda x: r"c:\Windows\System32\libusb0.dll")
+            my_kwargs = {'backend': libusb_backend}
+        devlist = []
+        try:
+            for id in idProduct:
+                if id:
+                    dev = list(usb.core.find(find_all=True, idVendor=0x2B3E, idProduct=id, **my_kwargs))
+                else:
+                    dev = list(usb.core.find(find_all=True, idVendor=0x2B3E, **my_kwargs))
+                if len(dev) > 0:
+                    if len(dev) == 1:
                         devlist.extend(dev)
-                if dictonly:
-                    devlist = [{'sn': d.serial_number, 'product': d.product, 'pid': d.idProduct, 'vid': d.idVendor} for d in devlist]
-                    
-                return devlist
-            except (usb.core.NoBackendError, ValueError):
-                # An error in the previous find is often caused by Windows 64-bit not detecting the correct library, attempt to force this with paths
-                # that often work so user isn't aware
-                #from usb.backend import libusb0
-                libusb_backend = libusb0.get_backend(find_library=lambda x: r"c:\Windows\System32\libusb0.dll")
-                devlist = []
-                continue
-                
-        raise IOError("Failed to find USB backend. Check libusb drivers installed, check for path issues on library, and check for 32 vs 64-bit issues.")
+                    else:
+                        # Deals with the multiple chipwhisperers attached but user only
+                        # has permission to access a subset. The langid error is usually
+                        # raised when there are improper permissions, so it is used to
+                        # skip the those devices. However, the user is warned when this
+                        # happens because the langid error is occasionally raised when
+                        # there are backend errors.
+                        for d in dev:
+                            try:
+                                d.serial_number
+                                devlist.append(d)
+                            except ValueError as e:
+                                if "langid" in str(e):
+                                    logging.info('A device raised the "no langid" error, it is being skipped')
+                                else:
+                                    raise
+            if dictonly:
+                devlist = [{'sn': d.serial_number, 'product': d.product, 'pid': d.idProduct, 'vid': d.idVendor} for d in devlist]
+
+            return devlist
+        except ValueError as e:
+            if "langid" not in str(e):
+                raise
+            raise OSError("'This device has no langid' ValueError caught. This is usually caused by us trying to read the serial number of the chipwhisperer, but it failing. The device is here and we can see it, but we can't access it. This has a number of root causes, including:\n" +
+                        "-Not having permission to access the ChipWhisperer (this still crops up if you have permission for one ChipWhisperer, but another ChipWhisperer is connected that you don't have access to)\n" +
+                        "-Not having the correct libusb backend loaded (common on Windows with 64bit Python). We try to handle this by loading the correct backend on Windows"
+                        )
 
     def sendCtrl(self, cmd, value=0, data=[]):
         """
@@ -500,6 +520,9 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
             self.usbdev().read(self.rep, 1000, timeout=0.010)
         except:
             pass
+
+    def read(self, dbuf, timeout):
+        return self.usbdev().read(self.rep, dbuf, timeout)
 
 class NAEUSB(object):
     """
@@ -707,10 +730,11 @@ class NAEUSB(object):
 
         # Flush input buffers in case anything was left
         try:
-            self.usbdev().read(self.rep, 4096, timeout=10)
-            self.usbdev().read(self.rep, 4096, timeout=10)
-            self.usbdev().read(self.rep, 4096, timeout=10)
-            self.usbdev().read(self.rep, 4096, timeout=10)
+            #self.cmdReadMem(self.rep)
+            self.usbtx.read(4096, timeout=10)
+            self.usbtx.read(4096, timeout=10)
+            self.usbtx.read(4096, timeout=10)
+            self.usbtx.read(4096, timeout=10)
         except IOError:
             pass
 
@@ -724,6 +748,9 @@ class NAEUSB(object):
 
         if forreal:
             self.sendCtrl(0x22, 3)
+
+    def read(self, dlen, timeout=2000):
+        self.usbserializer.read(dlen, timeout)
 
     class StreamModeCaptureThread(Thread):
         def __init__(self, serial, dlen, dbuf_temp, timeout_ms=2000):
@@ -750,7 +777,7 @@ class NAEUSB(object):
             logging.debug("Streaming: starting USB read")
             start = time.time()
             try:
-                self.drx = self.serial.usbdev().read(self.serial.rep, self.dbuf_temp, timeout=self.timeout_ms)
+                self.drx = self.serial.usbtx.read(self.dbuf_temp, timeout=self.timeout_ms)
             except IOError as e:
                 logging.warning('Streaming: USB stream read timed out')
             diff = time.time() - start

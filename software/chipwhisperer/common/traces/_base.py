@@ -27,11 +27,10 @@ import logging
 import re
 import numpy as np
 from . import _cfgfile
-from chipwhisperer.common.utils.pluginmanager import Plugin
-from chipwhisperer.common.utils.parameter import Parameterized, Parameter
+from chipwhisperer.common.utils.parameter import Parameterized
 
 
-class TraceContainer(Parameterized, Plugin):
+class TraceContainer(Parameterized):
     """
     TraceContainer holds traces for the system to operate on. This can include both reading in traces for analysis, and
     writing traces to disk.
@@ -50,6 +49,7 @@ class TraceContainer(Parameterized, Plugin):
                 {'name':'Format', 'key':'format', 'type':'str', 'readonly':True, 'value':''},
         ])
         self.clear()
+        self.project = project
         
         #If we have a project file, do specific setup related to project
         if project and default_setup:
@@ -97,13 +97,16 @@ class TraceContainer(Parameterized, Plugin):
             self._numTraces = max(cfint, self._numTraces)
         return self._numTraces
 
-    def addTrace(self, trace, textin, textout, key, dtype=np.double, channelNum=0):
+    def add_trace(self, trace, textin, textout, key, dtype=np.double, channelNum=0):
         if channelNum!=0:
             raise NotImplementedError
         self.addWave(trace, dtype)
         self.addTextin(textin)
         self.addTextout(textout)
         self.addKey(key)
+        self.project.trace_manager()._updateRanges()
+
+    addTrace = add_trace
 
     def writeDataToConfig(self):
         self.config.setAttr("numTraces", self._numTraces)
@@ -284,6 +287,9 @@ class TraceContainer(Parameterized, Plugin):
     def isLoaded(self):
         """Returns true if you can use getTrace, getTextin, etc methods"""
         return self._isloaded
+
+    def __repr__(self):
+        return 'TraceContainerNative(number_of_traces={}, trace_length={})'.format(self.numTraces(), self.numPoints())
         
         
 if __name__ == "__main__":
