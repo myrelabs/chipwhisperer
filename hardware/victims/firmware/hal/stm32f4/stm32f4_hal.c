@@ -62,7 +62,11 @@ void init_uart(void)
 	HAL_GPIO_Init(GPIOA, &GpioInit);
 
 	UartHandle.Instance        = USART1;
-	UartHandle.Init.BaudRate   = 38400;
+  #if SS_VER==SS_VER_2_0
+  UartHandle.Init.BaudRate   = 230400;
+  #else
+  UartHandle.Init.BaudRate   = 38400;
+  #endif
 	UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
 	UartHandle.Init.StopBits   = UART_STOPBITS_1;
 	UartHandle.Init.Parity     = UART_PARITY_NONE;
@@ -72,26 +76,44 @@ void init_uart(void)
 	HAL_UART_Init(&UartHandle);
 }
 
+//#define STM32F4_WLCSP
+
 void trigger_setup(void)
 {
+#ifdef STM32F4_WLCSP
+ 	GPIO_InitTypeDef GpioInit;
+	GpioInit.Pin       = GPIO_PIN_4;
+	GpioInit.Mode      = GPIO_MODE_OUTPUT_PP;
+	GpioInit.Pull      = GPIO_NOPULL;
+	GpioInit.Speed     = GPIO_SPEED_FREQ_HIGH;
+    __GPIOD_CLK_ENABLE();
+    HAL_GPIO_Init(GPIOD, &GpioInit);   
+#else
 	GPIO_InitTypeDef GpioInit;
 	GpioInit.Pin       = GPIO_PIN_12;
 	GpioInit.Mode      = GPIO_MODE_OUTPUT_PP;
 	GpioInit.Pull      = GPIO_NOPULL;
 	GpioInit.Speed     = GPIO_SPEED_FREQ_HIGH;
 	HAL_GPIO_Init(GPIOA, &GpioInit);
+#endif
 }
-
 void trigger_high(void)
 {
+#ifdef STM32F4_WLCSP
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, SET);
+#else
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, SET);
+#endif
 }
 
 void trigger_low(void)
 {
+#ifdef STM32F4_WLCSP
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, RESET);
+#else
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, RESET);
+#endif
 }
-
 char getch(void)
 {
 	uint8_t d;
@@ -124,10 +146,19 @@ void HW_AES128_LoadKey(uint8_t* key)
 	}
 }
 
+void HW_AES128_Enc_pretrigger(uint8_t* pt)
+{
+    HAL_CRYP_Init(&cryp);
+}
+
 void HW_AES128_Enc(uint8_t* pt)
 {
-	HAL_CRYP_Init(&cryp);
-  HAL_CRYP_AESECB_Encrypt(&cryp, pt, 16, pt, 1000);
+    HAL_CRYP_AESECB_Encrypt(&cryp, pt, 16, pt, 1000);
+}
+
+void HW_AES128_Enc_posttrigger(uint8_t* pt)
+{
+    ;
 }
 
 void HW_AES128_Dec(uint8_t *pt)

@@ -24,7 +24,10 @@ static uint32_t nbAesBlocks;
 void platform_init(void)
 {
      trng_config_t trngConfig;
-
+     
+#if ETM_ENABLE
+     etmtrace_enable();
+#endif
      BOARD_BootClockRUN();
 
 #if USE_TRUSTED_CRYPTO
@@ -104,6 +107,17 @@ void HW_AES128_LoadKey(uint8_t* key)
      MMCAU_AES_SetKey(key, AES_KEY_SIZE, AES_KEY_SCH);
 #endif
 }
+
+void HW_AES128_Enc_pretrigger(uint8_t* pt)
+{
+    ;
+}
+
+void HW_AES128_Enc_posttrigger(uint8_t* pt)
+{
+    ;
+}
+
 void HW_AES128_Enc(uint8_t* pt)
 {
 #if USE_TRUSTED_CRYPTO

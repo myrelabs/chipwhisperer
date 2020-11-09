@@ -92,6 +92,10 @@ class GPIOSettings(util.DisableNewAttr):
         self.disable_newattr()
 
 
+    def read_tio_states(self):
+        bitmask = self.cwe.readTIOPins()
+        return tuple(((bitmask >> i) & 0x01) for i in range(4))
+
     def _dict_repr(self):
         dict = OrderedDict()
         dict['tio1'] = self.tio1
@@ -111,7 +115,29 @@ class GPIOSettings(util.DisableNewAttr):
 
         dict['target_pwr'] = self.target_pwr
 
+        dict['tio_states'] = self.tio_states
+
         return dict
+
+    @property
+    def tio_states(self):
+        """
+        Reads the logic level of the TIO pins (1-4) and
+        returns them as a tuple of the logic levels. 
+
+        .. warning:: ChipWhisperer firmware before release 5.2.1 does not support
+            reading the TIO pins!
+
+        :getter: Read TIO states
+
+        Returns:
+            A tuple of 1's and 0's representing the logic levels
+            of each TIO pin
+
+        .. versionadded:: 5.3
+            Add documented interface for the old method of reading TIO pins
+        """
+        return self.read_tio_states()
 
     def __repr__(self):
         return util.dict_to_str(self._dict_repr())
@@ -471,6 +497,10 @@ class GPIOSettings(util.DisableNewAttr):
 
         This is the low-power version of glitch_hp - see that documentation
         for more details.
+
+        .. warning:: Use with caution - ensure that the glitch module is properly
+            configured before enabling this setting, as it is possible to
+            permanently damage hardware with this output.
         """
         return self.cwe.targetGlitchOut('B')
 
@@ -508,6 +538,7 @@ class TriggerSettings(util.DisableNewAttr):
             'tio2': self.cwe.PIN_RTIO2,
             'tio3': self.cwe.PIN_RTIO3,
             'tio4': self.cwe.PIN_RTIO4,
+            'nrst': self.cwe.PIN_TNRST,
         }
 
         self.last_module = "basic"
@@ -540,6 +571,7 @@ class TriggerSettings(util.DisableNewAttr):
 
         Pins:
          * tio1-4: Target I/O pins 1-4. Note that these pins can be in any mode.
+         * nRST: Target I/O pin nRST. Note that these pins can be in any mode.
          * sma: An auxiliary SMA input, if available (only on CW1200)
 
         Boolean operations:
@@ -553,6 +585,7 @@ class TriggerSettings(util.DisableNewAttr):
          * "tio1"
          * "tio3 OR tio4"
          * "tio1 NAND tio2 NAND sma"
+         * "nrst"
 
         Examples of unallowed trigger inputs:
          * "tio1 tio2"
@@ -595,6 +628,10 @@ class TriggerSettings(util.DisableNewAttr):
 
         if pins & self.cwe.PIN_FPA:
             tstring.append("sma")
+            tstring.append(modes)
+            
+        if pins & self.cwe.PIN_TNRST:
+            tstring.append("nrst")
             tstring.append(modes)
 
         #Remove last useless combination mode
@@ -782,7 +819,7 @@ class ChipWhispererExtra(object):
 
 class CWExtraSettings(object):
     PIN_FPA = 0x01
-    PIN_FPB = 0x02
+    PIN_TNRST = 0x02
     PIN_RTIO1 = 0x04
     PIN_RTIO2 = 0x08
     PIN_RTIO3 = 0x10

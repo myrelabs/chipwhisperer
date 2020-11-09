@@ -9,6 +9,7 @@ or the hard way.
 
 Basic
  * :ref:`install-virtual-machine` (Recommended)
+ * :ref:`install-windows-exe` (Windows 10 recommended)
 
 Advanced
  * :ref:`prerequisites`
@@ -17,16 +18,18 @@ Advanced
      * :ref:`prerequisites-mac`
 
  * :ref:`Installation <install>`
-     * :ref:`install-repo-releases`
-     * :ref:`install-repo-pypi`
      * :ref:`install-repo-git`
+     * :ref:`install-repo-pypi`
+     * :ref:`install-repo-releases`
+
+ * :ref:`install-wm-ware`
 
 
 .. _install-virtual-machine:
 
-***************
-Virtual Machine
-***************
+****************************
+Virtual Machine (VirtualBox)
+****************************
 
 If this is your first time using the ChipWhisperer toolchain, the easiest
 way to start is to use a virtual machine with everything already set up for
@@ -41,8 +44,9 @@ the correct extension pack is installed.
  * Install `VirtualBox`_. This program is freely available on Windows, Mac,
    and Linux.
 
- * Install the `VirtualBox Extension Pack`_. This is necessary for the VM to
-   interact with the ChipWhisperer hardware.
+ * Install the VirtualBox Extension pack, which can be found on the VirtualBox 
+   downloads page linked above. This is necessary for the VM to interact with 
+   the ChipWhisperer hardware.
 
  * Download a ChipWhisperer virtual machine image release or build it
    yourself using Vagrant.
@@ -64,11 +68,12 @@ the correct extension pack is installed.
 Next, we'll need to update some passwords for the VM. Boot the virtual
 machine then:
 
- * Log in (user: vagrant pass: vagrant). You will be asked to update your
-   password. Do so (make sure to record this password).
+ * Log in (user: vagrant pass: vagrant).
 
- * Setup a new password for Jupyter. This can be done by typing jupyter
-   notebook password, then entering and verifying your new password. Note
+ * Setup a new password for Jupyter. As of release 5.2.0, you will be prompted
+   to set a password on startup if one doesn't exist for Jupyter. For older
+   releases, simply type :code:`jupyter notebook password` in the command prompt,
+   then set a password. Note
    that Jupyter will not start until this is done. This password will be
    needed to log into Jupyter, so make sure you record it as well.
 
@@ -88,8 +93,66 @@ type **localhost:8888** into the address bar. This will give you access to
 the Jupyter Notebook server running in the virtual machine.
 
 .. _VirtualBox: https://www.virtualbox.org/wiki/Downloads
-.. _VirtualBox Extension Pack: https://download.virtualbox.org/virtualbox/6.0.6/Oracle_VM_VirtualBox_Extension_Pack-6.0.6.vbox-extpack
 
+.. _install-windows-exe:
+
+*****************
+Windows Installer
+*****************
+.. note:: The installer only includes the ChipWhisperer software itself. It 
+  does not include compilers necessary for building firmware for ChipWhisperer 
+  targets. The easiest way to fulfill these requirements is through the Ubuntu 
+  Windows subsystem, which will be discussed later.
+
+If you want to run a native Windows installation of ChipWhisperer, your best 
+bet is to run the Windows installer, which takes care of getting the 
+prerequisites for you. The steps for using the installar are as follows:
+
+ * Navigate to the ChipWhisperer release page on Github: `releases`_
+
+ * Find the latest ChipWhisperer Windows install executable (currently 
+   :code:`Chipwhisperer.v5.1.3.Setup.64-bit.exe` for 64 bit Windows and 
+   :code:`Chipwhisperer.v5.1.3.Setup.32-bit.exe` for 32 bit Windows)
+ 
+ * Run the executable and choose the path you want to install ChipWhisperer at. 
+   You must have read/write permissions for the location you install to, so 
+   avoid installing in a location like C:\Program Files or the like. The 
+   default install location (the user's home directory) will work for most users.
+
+ * Choose whether or not you want to create a desktop shortcut for running 
+   ChipWhisperer and whether or not you want to install Git for updating 
+   ChipWhisperer (recommended).
+
+ * Finally, connect the ChipWhisperer to your computer and install the drivers for your device. 
+   Instructions can be found in :ref:`prerequisites`.
+
+ Once this is completed, you should have a fully functioning ChipWhisperer 
+ install. However, you will still need to install compilers to build firmware for targets. To finish the installation:
+
+  * Open powershell and run: :code:`Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux`
+
+  * Restart your computer
+ 
+  * Install `Ubuntu-for-Windows`_ 
+  
+  * Run Ubuntu, which should be accessable via the start menu
+
+  * Run the following commands: 
+
+    .. code:: bash
+
+        sudo apt update
+        sudo apt upgrade
+        sudo apt install make avr-libc gcc-avr gcc-arm-none-eabi
+ 
+
+With this, you now have a fully functioning ChipWhisperer install. Run the 
+ChipWhisperer app, then navigate to the Jupyter folder, where tutorials for 
+running ChipWhisperer are located.
+
+.. _releases: https://github.com/newaetech/chipwhisperer/releases
+
+.. _Ubuntu-for-Windows: https://www.microsoft.com/en-ca/p/ubuntu/9nblggh4msv6?activetab=pivot:overviewtab
 
 .. _install-repo:
 
@@ -108,89 +171,27 @@ ChipWhisperer
 After satisfying prerequisites for your system, install the ChipWhisperer
 repository/package using one of:
 
-:ref:`install-repo-releases` (Recommended)
-	Get the latest stable release from the GitHub repository. The release includes
-	repository and zipped drivers.
+:ref:`install-repo-git` (Recommended)
+  The best way to get the ChipWhisperer software, as well as
+  drivers, hardware source code, and Jupyter Notebook tutorials.
+
 
 :ref:`install-repo-pypi`
 	The classic :code:`pip install chipwhisperer`. Does not install
 	the drivers, or hardware source code currently.
 
-:ref:`install-repo-git`
-	Install the latest features and bugs from our GitHub repository.
-
-
-.. _install-repo-releases:
-
-GitHub Releases
-===============
-
-Once you have a working Python 3 installation, you're ready to install and run ChipWhisperer.
-
-First, download a ChipWhisperer release. You can get these from the `releases`_ page.
-Generally, the latest release is a good choice, but you might need an older version
-for various reasons. You want the source code in .zip or .tar.gz format - not a VBox
-image.
-
-Next, uncompress your downloaded source code somewhere. Generally, 'somewhere' will
-become your ChipWhisperer working directory. For example, on Windows, you might
-want to use *C:\\chipwhisperer\\*.
-
-Once you've got the file, install the python dependencies and run the Python
-install procedure (setup.py) using pip. Use the -e flag for develop mode to indicate
-that the files will probably be changing frequently. To do this, open a terminal and run
-the following, adjusting paths as needed:
-
-.. code:: bash
-
-    cd chipwhisperer
-    python -m pip install -e . --user
-
-    # to be able to run jupyter and the tutorials
-    pip install -r jupyter/requirements.txt --user
-
-    # enable jpyter interactive widgets
-    jupyter nbextension enable --py widgetsnbextension
-
-
-To test, run python and try importing the **chipwhisperer** module:
-
-.. code:: python
-
-    >>> import chipwhisperer as cw
-
-If you want to run the tutorials you can now start the
-:ref:`Jupyter Notebook server <starting>`.
-
-
-.. _releases: https://github.com/newaetech/chipwhisperer/releases
-
-.. _install-repo-pypi:
-
-PyPi
-====
-
-If you want to use **chipwhisperer** as a standalone python package and are not
-interested in having all the tutorials and extra jupyter notebook stuff, this
-installation method is for you::
-
-    pip install chipwhisperer
-
-Will install the *chipwhisperer/software/chipwhisperer* python package in your
-site packages. Now you can go play around with the :ref:`Python API <api>`, or
-take a look at some example :ref:`tutorials <tutorials>` The tutorials are all
-written in jupyter notebook, which you don't have using this installation
-method. However, you can still take a look at the procedure and the code, and
-use it as an example of what can be accomplished using **chipwhisperer**.
-
+:ref:`install-repo-releases`
+	Get the latest stable release from the GitHub repository. The release includes
+	repository and zipped drivers.
 
 .. _install-repo-git:
 
 Git
 ===
 
-If you want the cutting-edge version of ChipWhisperer, you can clone the
-repository.
+The recommended way to install ChipWhisperer natively is by cloning it from 
+Git. By default this will pull in the develop version, which has all the 
+latest features/bug fixes, but we also keep each major release on master.
 
 .. note::
 
@@ -233,3 +234,133 @@ you need it:
     python -m pip install -e . --user
 
 Once ChipWhisperer is installed, you can :ref:`run chipwhisperer <starting>`.
+
+.. _install-repo-pypi:
+
+PyPi
+====
+
+If you want to use **chipwhisperer** as a standalone python package and are not
+interested in having all the tutorials and extra jupyter notebook stuff, this
+installation method is for you::
+
+    pip install chipwhisperer
+
+Will install the *chipwhisperer/software/chipwhisperer* python package in your
+site packages. Now you can go play around with the :ref:`Python API <api>`, or
+take a look at some example :ref:`tutorials <tutorials>` The tutorials are all
+written in jupyter notebook, which you don't have using this installation
+method. However, you can still take a look at the procedure and the code, and
+use it as an example of what can be accomplished using **chipwhisperer**.
+
+.. _install-repo-releases:
+
+GitHub Releases
+===============
+
+ChipWhisperer is also available as a Github release. This version won't come with
+Jupyter tutorials and will be more difficult to update, so it isn't recommended.
+
+First, download a ChipWhisperer release. You can get these from the `releases`_ page.
+Generally, the latest release is a good choice, but you might need an older version
+for various reasons. You want the source code in .zip or .tar.gz format - not a VBox
+image.
+
+Next, uncompress your downloaded source code somewhere. Generally, 'somewhere' will
+become your ChipWhisperer working directory. For example, on Windows, you might
+want to use *C:\\chipwhisperer\\*.
+
+Once you've got the file, install the python dependencies and run the Python
+install procedure (setup.py) using pip. Use the -e flag for develop mode to indicate
+that the files will probably be changing frequently. To do this, open a terminal and run
+the following, adjusting paths as needed:
+
+.. code:: bash
+
+    cd chipwhisperer
+    python -m pip install -e . --user
+
+    # to be able to run jupyter and the tutorials
+    pip install -r jupyter/requirements.txt --user
+
+    # enable jpyter interactive widgets
+    jupyter nbextension enable --py widgetsnbextension
+
+
+To test, run python and try importing the **chipwhisperer** module:
+
+.. code:: python
+
+    >>> import chipwhisperer as cw
+
+If you want to run the tutorials you can now start the
+:ref:`Jupyter Notebook server <starting>`.
+
+
+.. _releases: https://github.com/newaetech/chipwhisperer/releases
+
+
+.. _install-wm-ware:
+
+*************************
+Virtual Machine (VMWare)
+*************************
+
+For various reasons, such as licensing and USB support, users may prefer to run 
+ChipWhisperer through VMWare instead of VirtualBox. A VMWare compatable image is not
+provided with ChipWhisperer releases, but such an image can be easily converted
+from the provided image using VirtualBox
+
+ * Install `VirtualBox`_
+
+ * Download a ChipWhisperer virtual machine image release or build it
+   yourself using Vagrant. Virtual machine images can be found on our Github
+   `releases`_
+
+ * Add the VM image to VirtualBox
+
+ * Right click on the image in VirtualBox and select :code:`Export to OCI` 
+
+ * Select :code:`OVF Format 1.0` and export using the default settings.
+
+ * The resulting :code:`.ovf` file can be opened in VMWare. VMWare may complain
+   about the file not following OVF specifications. If this happens, hit 
+   :code:`retry`.
+
+You should now have a working VMWare image. Boot the VM and add passwords as described in :ref:`install-virtual-machine`
+Before logging out, run the following command and record the :code:`eth0` IP Address:
+
+.. code:: bash
+
+    ip addr
+
+The final step is to setup VMWare port forwarding:
+
+ * If you have VMWare Player, you'll need to install VMWare Workstation Pro.
+   The required utility tool does not require a license to run, so Workstation
+   Pro can be installed without purchasing the software. If you're already
+   running Workstation Pro, you can skip this step.
+
+ * Navigate to the folder where VMWare Workstation Pro is installed and run 
+   :code:`vmnetcfg.exe`
+
+ * Click the :code:`Change Settings` button.
+
+ * Click on the :code:`NAT` table entry (typically VMnet8) and click on :code:`NAT Settings...` 
+   Take note of the Subnet Address of this entry
+
+ * Under the Port Fowarding table, click :code:`Add` and fill in the following settings:
+     * :code:`Host port:                  8888`
+     * :code:`Type:                       TCP`
+     * :code:`Virtual machine IP address: <subnet address>`
+     * :code:`Virtual machine port:       8888`
+     * :code:`Description:                Jupyter` (optional)
+
+ * Hit :code:`OK` until :code:`vmnetcfg.exe` is closed
+
+You should now be able to open the VM and connect to :code:`<eth0 IP>:8888`, replacing
+:code:`<eth0 IP>` with the IP address you recorded after running :code:`ip addr`. 
+
+
+ 
+

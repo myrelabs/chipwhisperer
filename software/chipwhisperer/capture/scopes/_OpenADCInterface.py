@@ -334,6 +334,8 @@ class TriggerSettings(util.DisableNewAttr):
         self._stream_mode = False
         self._support_get_duration = True
         self._is_pro = False
+        self._cached_samples = None
+        self._cached_offset = None
 
 
         self.disable_newattr()
@@ -434,10 +436,13 @@ class TriggerSettings(util.DisableNewAttr):
         Raises:
            ValueError: if number of samples is negative
         """
-        return self._get_num_samples()
+        if self._cached_samples is None:
+            self._cached_samples = self._get_num_samples()
+        return self._cached_samples
 
     @samples.setter
     def samples(self, samples):
+        self._cached_samples = samples
         self._set_num_samples(samples)
 
     @property
@@ -476,10 +481,13 @@ class TriggerSettings(util.DisableNewAttr):
         Raises:
            ValueError: if offset outside of range [0, 2**32)
         """
-        return self._get_offset()
+        if self._cached_offset is None:
+            self._cached_offset = self._get_offset()
+        return self._cached_offset
 
     @offset.setter
     def offset(self, setting):
+        self._cached_offset = setting
         self._set_offset(setting)
 
     @property
@@ -506,6 +514,9 @@ class TriggerSettings(util.DisableNewAttr):
     @property
     def basic_mode(self):
         """The type of event to use as a trigger.
+
+        Only applies to the ADC capture - the glitch module
+        is always a rising edge trigger.
 
         There are four possible types of trigger events:
          * "low": triggers when line is low (logic 0)
@@ -594,7 +605,7 @@ class TriggerSettings(util.DisableNewAttr):
         self._numSamples = samples
         self.oa.setNumSamples(samples)
 
-    def _get_num_samples(self, cached=False):
+    def _get_num_samples(self, cached=True):
         if self.oa is None:
             return 0
 
@@ -1007,7 +1018,8 @@ class ClockSettings(util.DisableNewAttr):
         """The CLKGEN output frequency in Hz.
 
         The CLKGEN module takes the input source and multiplies/divides it to
-        get a faster or slower clock as desired.
+        get a faster or slower clock as desired. Minimum clock in practice
+        is 3.2MHz.
 
         :Getter:
             Return the current calculated CLKGEN output frequency in Hz
@@ -1060,6 +1072,8 @@ class ClockSettings(util.DisableNewAttr):
         return (inpfreq * self._getClkgenMul()) / self._getClkgenDiv()
 
     def _autoMulDiv(self, freq):
+        if freq < 3.2E6: #practical min limit of clkgen
+            logging.warning("Requested clock value below minimum of 3.2MHz - DCM may not lock!")
         if self._get_clkgen_src() == "extclk":
             inpfreq = self._get_extclk_freq()
         else:
@@ -1466,6 +1480,7 @@ class ClockSettings(util.DisableNewAttr):
 
 class OpenADCInterface(object):
 
+    cached_settings = None
     def __init__(self, serial_instance):
         self.serial = serial_instance
         self.offset = 0.5
@@ -1520,7 +1535,7 @@ class OpenADCInterface(object):
 
             logging.error('%d errors in %d' % (totalerror, totalbytes))
 
-    def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None, readMask=None):
+    def sendMessage(self, mode, address, payload=None, Validate=False, maxResp=None, readMask=None):
         """Send a message out the serial port"""
 
         if payload is None:
@@ -1646,17 +1661,20 @@ class OpenADCInterface(object):
                         logging.error(errmsg)
 
 ### Generic
-    def setSettings(self, state, validate=True):
+    def setSettings(self, state, validate=False):
         cmd = bytearray(1)
         cmd[0] = state
+        self.cached_settings = state
         self.sendMessage(CODE_WRITE, ADDR_SETTINGS, cmd, Validate=validate)
 
-    def settings(self):
-        sets = self.sendMessage(CODE_READ, ADDR_SETTINGS)
-        if sets:
-            return sets[0]
-        else:
-            return 0
+    def settings(self, use_cached=False):
+        if (not use_cached) or (not self.cached_settings):
+            sets = self.sendMessage(CODE_READ, ADDR_SETTINGS)
+            if sets is None:
+                self.cached_settings = 0
+            else:
+                self.cached_settings = sets[0]
+        return self.cached_settings
 
     def setReset(self, value):
         if value:
@@ -1815,6 +1833,7 @@ class OpenADCInterface(object):
     #     return addr
 
     def arm(self, enable=True):
+        # keeps calling self.setting() - what if we cache it?
         if enable:
             #Must arm first
             self.setSettings(self.settings() | SETTINGS_ARM)
@@ -1827,11 +1846,13 @@ class OpenADCInterface(object):
             # Stream mode adds 500mS of extra timeout on USB traffic itself...
             self.serial.initStreamModeCapture(self._stream_len, self._sbuf, timeout_ms=int(self._timeout * 1000) + 500)
 
-    def capture(self, offset=None):
+    def capture(self, offset=None, adc_freq=29.53E6, samples=24400):
         timeout = False
         sleeptime = 0
         if offset:
-            sleeptime = 4*offset/100000 #rougly 4ms per 100k offset
+            sleeptime = (29.53E6*8*offset)/(100000*adc_freq) #rougly 8ms per 100k offset
+            sleeptime /= 1000
+
         if self._streammode:
 
             # Wait for a trigger, letting the UI run when it can
@@ -1871,8 +1892,8 @@ class OpenADCInterface(object):
                 status = self.getStatus()
 
                 # Wait for a moment before re-running the loop
-                #time.sleep(0.01) ## <-- This causes the capture slowdown
-                util.better_delay(sleeptime) ## faster sleep method
+                #time.sleep(sleeptime) ## <-- This causes the capture slowdown
+                #util.better_delay(sleeptime) ## faster sleep method
                 diff = datetime.datetime.now() - starttime
 
                 # If we've timed out, don't wait any longer for a trigger
@@ -1882,22 +1903,34 @@ class OpenADCInterface(object):
                     self.triggerNow()
 
                 # Give the UI a chance to update (does nothing if not using UI)
-                # util.updateUI()
 
-            self.arm(False)
+            #time.sleep(0.005)
+            #time.sleep(sleeptime*10)
 
             # If using large offsets, system doesn't know we are delaying api
-            nosampletimeout = self._nosampletimeout * 10
-            while (self.getBytesInFifo() == 0) and nosampletimeout:
-                logging.debug("Bytes in Fifo: {}".format(self.getBytesInFifo()))
-                time.sleep(0.005)
-                nosampletimeout -= 1
 
-            if nosampletimeout == 0:
-                logging.warning('No samples received. Either very long offset, or no ADC clock (try "Reset ADC DCM"). '
-                                'If you need such a long offset, increase "scope.qtadc.sc._nosampletimeout" limit.')
-                timeout = True
+            # NOTE: This doesn't actually delay until adc starts reading
+            # so need to actually do the manual delay
+            #nosampletimeout = self._nosampletimeout * 10
+            #while (self.getBytesInFifo() == 0) and nosampletimeout:
+            #    logging.debug("Bytes in Fifo: {}".format(self.getBytesInFifo()))
+            #    time.sleep(0.001)
+            #    nosampletimeout -= 1
 
+            #if nosampletimeout == 0:
+            #    logging.warning('No samples received. Either very long offset, or no ADC clock (try "Reset ADC DCM"). '
+            #                    'If you need such a long offset, increase "scope.qtadc.sc._nosampletimeout" limit.')
+            #    timeout = True
+
+        # give time for ADC to finish reading data
+        # may need to adjust delay
+        cap_delay = (7.37E6 * 4 * samples) / (adc_freq * 24400)
+        cap_delay *= 0.001
+        time.sleep(cap_delay+sleeptime)
+        # 0.000819672131147541
+        # 
+        #time.sleep(sleeptime) #need to do this one as well
+        self.arm(False) # <------ ADC will stop reading after this
         return timeout
 
     def flush(self):

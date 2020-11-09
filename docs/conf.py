@@ -22,11 +22,11 @@ sys.path.insert(0, os.path.abspath('./../software'))
 # -- Project information -----------------------------------------------------
 
 project = 'ChipWhisperer'
-copyright = "2019, NewAE Technology Inc."
+copyright = "2020, NewAE Technology Inc."
 author = "NewAE Technology Inc."
 
 # The full version, including alpha/beta/rc tags
-release = '5.1.1'
+release = '5.4.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -38,6 +38,7 @@ extensions = [
 	'sphinx.ext.napoleon',
 	'sphinx.ext.autodoc',
 	'sphinx.ext.todo',
+    'sphinxcontrib.images'
 ]
 
 # explicitly set the master document to index.rst
@@ -70,7 +71,7 @@ html_theme_options = {
     'github_button': 'true',
     'github_type': 'watch',
     'extra_nav_links': {
-        'Hardware Docs': 'https://wiki.newae.com/Main_Page#Hardware_Documentation',
+        'Hardware Docs': 'https://rtfm.newae.com',
         'Our Source Code': 'https://github.com/newaetech/chipwhisperer',
     },
     'sidebar_width': '265px',
@@ -123,7 +124,8 @@ def create_tutorial_files(app, config):
         shutil.copyfile(image_file, os.path.join(output_image_dir, image_name))
 
     # for tutorial identifier (pa_cpa_1), scope and target
-    p = re.compile(r'([A-Za-z_\d]*)-.*-([^-]*)-([^-]*)\.rst')
+    #p = re.compile(r'([A-Za-z_\d]*)-.*-([^-]*)-([^-]*)\.rst')
+    p = re.compile(r'([A-Za-z_ \d]*)-.*-([^-]*)-([^-]*)\.rst')
 
     generated_files = []
     for file in glob(os.path.join(tutorials_src_dir, "*.rst")):
@@ -157,6 +159,18 @@ def create_tutorial_files(app, config):
     Path(tutorials_overview_file).touch()
     generated_files.append(tutorials_overview_file)
 
+def generate_contributing(app, config):
+    """Callback to convert the contributing.md to an rst file"""
+    import pypandoc
+
+    print('Downloading pandoc')
+    pypandoc.pandoc_download.download_pandoc()
+
+    print('Generating contributing.rst')
+    pypandoc.convert_file('../contributing.md', 'rst', outputfile='contributing.rst')
+            
+
 
 def setup(app):
     app.connect('config-inited', create_tutorial_files)
+    app.connect('config-inited', generate_contributing)

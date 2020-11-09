@@ -62,34 +62,37 @@ OpenADC Scope
         :annotation: scope.adc
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.state
-            :annotation: scope.trigger.state
+            :annotation: scope.adc.state
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.stream_mode
-            :annotation: scope.trigger.stream_mode
+            :annotation: scope.adc.stream_mode
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.decimate
-            :annotation: scope.trigger.decimate
+            :annotation: scope.adc.decimate
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.samples
-            :annotation: scope.trigger.samples
+            :annotation: scope.adc.samples
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.timeout
-            :annotation: scope.trigger.timeout
+            :annotation: scope.adc.timeout
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.offset
-            :annotation: scope.trigger.offset
+            :annotation: scope.adc.offset
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.presamples
-            :annotation: scope.trigger.presamples
+            :annotation: scope.adc.presamples
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.basic_mode
-            :annotation: scope.trigger.basic_mode
+            :annotation: scope.adc.basic_mode
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.TriggerSettings.trig_count
-            :annotation: scope.trigger.trig_count
+            :annotation: scope.adc.trig_count
 
 
     .. attribute:: clock
+    
+        .. thumbnail:: figures/cwlitepro_clock.png
+    
         :annotation: scope.clock
 
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.ClockSettings.adc_src
@@ -131,6 +134,8 @@ OpenADC Scope
         .. autodata:: chipwhisperer.capture.scopes._OpenADCInterface.ClockSettings.clkgen_locked
             :annotation: scope.clock.clkgen_locked
 
+        .. automethod:: chipwhisperer.capture.scopes._OpenADCInterface.ClockSettings.reset_dcms
+
 
     .. attribute:: io
         :annotation: scope.io
@@ -159,6 +164,9 @@ OpenADC Scope
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererExtra.GPIOSettings.glitch_hp
             :annotation: scope.io.glitch_hp
 
+        .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererExtra.GPIOSettings.glitch_lp
+            :annotation: scope.io.glitch_lp
+
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererExtra.GPIOSettings.extclk_src
             :annotation: scope.io.extclk_src
 
@@ -167,6 +175,9 @@ OpenADC Scope
 
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererExtra.GPIOSettings.target_pwr
             :annotation: scope.io.target_pwr
+
+        .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererExtra.GPIOSettings.tio_states
+            :annotation: scope.io.tio_states
 
 
     .. attribute:: trigger
@@ -180,6 +191,9 @@ OpenADC Scope
 
 
     .. attribute:: glitch
+    
+        .. thumbnail:: figures/cwlitepro_glitch.png
+    
         :annotation: scope.glitch
 
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererGlitch.GlitchSettings.clk_src
@@ -199,6 +213,9 @@ OpenADC Scope
 
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererGlitch.GlitchSettings.trigger_src
             :annotation: scope.glitch.trigger_src
+
+        .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererGlitch.GlitchSettings.manual_trigger
+            :annotation: scope.glitch.manual_trigger
 
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererGlitch.GlitchSettings.arm_timing
             :annotation: scope.glitch.arm_timing
@@ -259,13 +276,13 @@ OpenADC Scope
         .. autodata:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererDecodeTrigger.ChipWhispererDecodeTrigger.rx_baud
             :annotation: scope.DecodeIO.rx_baud
 
-    .. automethod:: chipwhisperer.capture.scopes.OpenADC.OpenADC.default_setup
+    .. automethod:: chipwhisperer.capture.scopes.OpenADC.default_setup
 
-    .. automethod:: chipwhisperer.capture.scopes.OpenADC.OpenADC.arm
+    .. automethod:: chipwhisperer.capture.scopes.OpenADC.arm
 
-    .. automethod:: chipwhisperer.capture.scopes.OpenADC.OpenADC.capture
+    .. automethod:: chipwhisperer.capture.scopes.OpenADC.capture
 
-    .. automethod:: chipwhisperer.capture.scopes.OpenADC.OpenADC.get_last_trace
+    .. automethod:: chipwhisperer.capture.scopes.OpenADC.get_last_trace
 
     .. method:: dis()
 
@@ -376,15 +393,14 @@ Firmware Update
 ===============
 
 On some occasions it is necessary to reprogram the scope of the ChipWhisperer Nano, Lite
-or Pro.
+or Pro. The easist way to both enter the bootloader and flash new firmware
+is through our SAMFWLoader class.
 
-.. warning::
-    This is not necessary most of the time. It should be only done if you know exactly
-    what you are doing. This process will erase the firmware on the scope and make it
-    unusable until reprogrammed.
-
-.. seealso:: The manual way of updating the SAM3U Firmware can be found on the
-    `wiki <https://wiki.newae.com/Manual_SAM3U_Firmware_Update>`_.
+.. seealso:: You can also use the BOSSA 
+    `BOSSA <https://www.shumatech.com/web/products/bossa>`_ utiltiy
+    to reflash the SAM3U firmware. If you need to build it from source,
+    NewAE keeps a slightly modified version of the source at
+    https://github.com/newaetech/BOSSA
 
 .. autoclass:: chipwhisperer.capture.scopes.cwhardware.ChipWhispererSAM3Update.SAMFWLoader
 
@@ -435,9 +451,13 @@ Simple Serial Target
 
     .. automethod:: simpleserial_read
 
+    .. automethod:: simpleserial_read_witherrors
+
     .. automethod:: set_key
 
     .. automethod:: in_waiting
+
+    .. automethod:: in_waiting_tx
 
     .. automethod:: flush
 
@@ -447,6 +467,50 @@ Simple Serial Target
 
     .. autoattribute:: baud
 
+    .. autoattribute:: output_len
+
+    .. autoattribute:: simpleserial_last_sent
+
+    .. autoattribute:: simpleserial_last_read
+
+.. _api-target-simpleserial2:
+
+Simple Serial V2 Target
+=======================
+
+.. autoclass:: chipwhisperer.targets.SimpleSerial2
+
+    .. automethod:: write
+
+    .. automethod:: read
+
+    .. automethod:: send_cmd
+
+    .. automethod:: read_cmd
+
+    .. automethod:: reset_comms
+
+    .. automethod:: simpleserial_wait_ack
+
+    .. automethod:: simpleserial_write
+
+    .. automethod:: simpleserial_read
+
+    .. automethod:: simpleserial_read_witherrors
+
+    .. automethod:: set_key
+
+    .. automethod:: in_waiting
+
+    .. automethod:: in_waiting_tx
+
+    .. automethod:: flush
+
+    .. automethod:: close
+
+    .. automethod:: con
+
+    .. autoattribute:: baud
 
 .. _api-target-cw305:
 
@@ -458,6 +522,10 @@ CW305 FPGA Target
     .. automethod:: simpleserial_read
 
     .. automethod:: simpleserial_write
+
+    .. automethod:: spi_mode
+
+    .. automethod:: _con
 
     .. autoattribute:: clksleeptime
 
@@ -477,6 +545,55 @@ CW305 FPGA Target
 
         .. autodata:: chipwhisperer.hardware.naeusb.pll_cdce906.PLLCDCE906.pll_outfreq_get
             :annotation: target.pll.pll_outfreq_get
+
+        .. autodata:: chipwhisperer.hardware.naeusb.pll_cdce906.PLLCDCE906.pll_outsource_set
+            :annotation: target.pll.pll_outsource_set
+
+        .. autodata:: chipwhisperer.hardware.naeusb.pll_cdce906.PLLCDCE906.pll_outsource_get
+            :annotation: target.pll.pll_outsource_get
+
+        .. autodata:: chipwhisperer.hardware.naeusb.pll_cdce906.PLLCDCE906.pll_writedefaults
+            :annotation: target.pll.pll_writedefaults
+
+        .. autodata:: chipwhisperer.hardware.naeusb.pll_cdce906.PLLCDCE906.pll_outslew_set
+            :annotation: target.pll.pll_outslew_set
+
+        .. autodata:: chipwhisperer.hardware.naeusb.pll_cdce906.PLLCDCE906.pll_outslew_get
+            :annotation: target.pll.pll_outslew_get
+
+.. _cw305-spi-program:
+
+CW305 SPI Program
+=================
+
+.. autoclass:: chipwhisperer.capture.targets.CW305.FPGASPI
+
+    .. automethod:: erase_chip
+
+    .. automethod:: erase_block
+
+    .. automethod:: program
+
+    .. automethod:: verify
+
+    .. automethod:: read
+
+.. _cw305-fpga-io:
+
+CW305 SAM3U IO Control
+======================
+
+.. autoclass:: chipwhisperer.capture.targets.CW305.FPGAIO
+
+    .. automethod:: pin_set_output
+
+    .. automethod:: pin_set_state
+
+    .. automethod:: spi1_setpins
+
+    .. automethod:: spi1_enable
+
+    .. automethod:: spi1_transfer
 
 .. _api-target-program:
 
@@ -760,7 +877,7 @@ syntax.
 
         .. autoattribute:: sbox_output_successive
 
-        .. autoattribute:: shift_columns_output
+        .. autoattribute:: shift_rows_output
 
         .. automethod:: new_model
 
@@ -791,7 +908,7 @@ return a results object. There are a few methods for interacting with the result
 object.
 
 .. autoclass:: chipwhisperer.analyzer.attacks._stats.Results
-    :members: best_guesses, simple_PGE, set_known_key, find_maximums
+    :members: best_guesses, simple_PGE, set_known_key, find_maximums, key_guess
 
 
 .. _api-analyzer-utilities:

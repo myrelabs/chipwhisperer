@@ -384,7 +384,7 @@ class Project(Parameterized):
         """Saves the project.
 
         Writes the project to the disk. Before this is called your data
-        is not saved.
+        is not saved. Filenames for traces are set in this method.
         """
         if self.filename is None:
             return
@@ -803,11 +803,6 @@ class Segments:
         """
         seg = copy.copy(self.trace_container)
         seg.clear()
-        start_time = datetime.now()
-        prefix = start_time.strftime('%Y.%m.%d-%H.%M.%S') + "_"
-        seg.config.setConfigFilename(self.data_directory + "traces/config_" + prefix + ".cfg")
-        seg.config.setAttr("prefix", prefix)
-        seg.config.setAttr("date", start_time.strftime('%Y-%m-%d %H:%M:%S'))
         return seg
 
     def append(self, seg):
@@ -853,7 +848,10 @@ class IndividualIterable:
             raise StopIteration
 
         self.n += 1
-        return self.getter(self.n)
+        return self.getter(self.n - 1)
+    
+    def __len__(self):
+        return self.trace_num_func()
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -875,3 +873,14 @@ class IndividualIterable:
         else:
             raise TypeError('Indexing by integer or slice only')
 
+    def __array__(self):
+        # to make converting to numpy arrays much easier
+        if hasattr(self.getter(0), "dtype"):
+            dtype = self.getter(0).dtype
+        else:
+            dtype = 'uint8'
+        num_traces = self.trace_num_func()
+        len_trace = len(self.getter(0))
+        arr = np.zeros((num_traces, len_trace), dtype=dtype)
+        arr[:,:] = np.array([self.getter(i) for i in range(num_traces)])[:,:]
+        return arr

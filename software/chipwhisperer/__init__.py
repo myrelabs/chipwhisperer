@@ -8,6 +8,8 @@
 
 Main module for ChipWhisperer.
 """
+
+__version__ = '5.3.1'
 import os, os.path, time
 import warnings
 from zipfile import ZipFile
@@ -20,6 +22,13 @@ from chipwhisperer.common.api import ProjectFormat as project
 from chipwhisperer.common.traces import Trace
 from chipwhisperer.common.utils import util
 from chipwhisperer.capture.scopes.cwhardware.ChipWhispererSAM3Update import SAMFWLoader
+import logging
+import usb
+if usb.__version__ < '1.1.0':
+    print(f"---------------------------------------------------------")
+    print(f"ChipWhisperer requires pyusb >= 1.1.0, but you have {usb.__version__}")
+    print(f"---------------------------------------------------------")
+    logging.warning(f"ChipWhisperer requires pyusb >= 1.1.0, but you have {usb.__version__}")
 
 # replace bytearray with inherited class with better repr and str.
 import builtins
@@ -231,11 +240,13 @@ def target(scope, target_type=targets.SimpleSerial, **kwargs):
     target.con(scope, **kwargs)
     return target
 
-def capture_trace(scope, target, plaintext, key=None):
+def capture_trace(scope, target, plaintext, key=None, ack=True):
     """Capture a trace, sending plaintext and key
 
     Does all individual steps needed to capture a trace (arming the scope
-    sending the key/plaintext, getting the trace data back, etc.)
+    sending the key/plaintext, getting the trace data back, etc.). Uses
+    target.output_len as the length of the expected target reponse for
+    simpleserial.
 
     Args:
         scope (ScopeTemplate): Scope object to use for capture.
@@ -245,6 +256,8 @@ def capture_trace(scope, target, plaintext, key=None):
             sent). If None, don't send plaintext.
         key (bytearray, optional): Key to send to target. Should be unencoded
             bytearray. If None, don't send key. Defaults to None.
+        ack (bool, optional): Check for ack when reading response from target.
+            Defaults to True.
 
     Returns:
         :class:`Trace <chipwhisperer.common.traces.Trace>` or None if capture
@@ -266,31 +279,54 @@ def capture_trace(scope, target, plaintext, key=None):
 
     .. versionadded:: 5.1
         Added to simplify trace capture.
+
+    .. versionchanged:: 5.2
+        Added ack parameter and use of target.output_len
     """
-    if key:
-        target.set_key(key)
 
-    scope.arm()
+    import signal, logging
 
-    if plaintext:
-        target.simpleserial_write('p', plaintext)
+    # useful to delay keyboard interrupt here,
+    # since could interrupt a USB operation
+    # and kill CW until unplugged+replugged
+    class DelayedKeyboardInterrupt:
+        def __enter__(self):
+            self.signal_received = False
+            self.old_handler = signal.signal(signal.SIGINT, self.handler)
 
-    ret = scope.capture()
+        def handler(self, sig, frame):
+            self.signal_received = (sig, frame)
+            logging.debug('SIGINT received. Delaying KeyboardInterrupt.')
 
-    i = 0
-    while not target.is_done():
-        i += 1
-        time.sleep(0.05)
-        if i > 100:
-            warnings.warn("Target did not finish operation")
+        def __exit__(self, type, value, traceback):
+            signal.signal(signal.SIGINT, self.old_handler)
+            if self.signal_received:
+                self.old_handler(*self.signal_received)
+    with DelayedKeyboardInterrupt():
+        if key:
+            target.set_key(key, ack=ack)
+
+        scope.arm()
+
+        if plaintext:
+            target.simpleserial_write('p', plaintext)
+
+        ret = scope.capture()
+
+        i = 0
+        while not target.is_done():
+            i += 1
+            time.sleep(0.05)
+            if i > 100:
+                warnings.warn("Target did not finish operation")
+                return None
+
+        if ret:
+            warnings.warn("Timeout happened during capture")
             return None
 
-    if ret:
-        warnings.warn("Timeout happened during capture")
-        return None
-
-    response = target.simpleserial_read('r', 16)
-    wave = scope.get_last_trace()
+        response = target.simpleserial_read('r', target.output_len, ack=ack)
+        wave = scope.get_last_trace()
 
     if len(wave) >= 1:
         return Trace(wave, plaintext, response, key)
@@ -300,4 +336,27 @@ def capture_trace(scope, target, plaintext, key=None):
 
 captureTrace = camel_case_deprecated(capture_trace)
 
+def plot(*args, **kwargs):
+    """Get a plotting object for use in Jupyter.
+    
+    Uses a Holoviews/Bokeh plot with a width of 800 and
+    a height of 600. You must have Holoviews and Bokeh
+    installed, as well as be working in a Jupyter
+    environment.
 
+    args and kwargs are the same as a typical Holoviews plot.
+
+    Plotting a trace in a Jupyter environment::
+
+        import chipwhisperer as cw
+        scope = cw.scope()
+        ...
+        trace = cw.capture_trace(scope, target, text, key)
+        display(cw.plot(trace.wave))
+
+    Returns:
+        A holoviews Curve object
+    """
+    import holoviews as hv
+    hv.extension('bokeh', logo=False) #don't display logo, otherwise it pops up everytime this func is called.
+    return hv.Curve(*args, **kwargs).opts(width=800, height=600)

@@ -33,8 +33,12 @@
 #include "fpga_xmem.h"
 #include <string.h>
 
+#if BOARD == CW1200
+#define FW_VER_MAJOR 1
+#else
 #define FW_VER_MAJOR 0
-#define FW_VER_MINOR 11
+#endif
+#define FW_VER_MINOR 23
 #define FW_VER_DEBUG 0
 
 static volatile bool main_b_vendor_enable = true;
@@ -167,7 +171,7 @@ void USART2_Handler(void)
 		}
 				
 		bufidx++;
-		if (bufidx >= 128){
+		if (bufidx >= CIRCBUFSIZE){
 			udi_vendor_bulk_in_run(
 				usartbuffer[bufnum],
 				bufidx,
@@ -305,11 +309,6 @@ void ctrl_xmega_program_void(void)
 void ctrl_avr_program_void(void)
 {
 	V2Protocol_ProcessCommand();
-}
-
-void ctrl_cc_program_void(void)
-{
-	CCProtocol_ProcessCommand();
 }
 
 static void ctrl_usart2_enabledump(void)
@@ -509,10 +508,6 @@ bool main_setup_out_received(void)
 			udd_g_ctrlreq.callback = ctrl_sam3ucfg_cb;
 			return true;
 			
-		/* ChipCon (TI) Programming */
-		case REQ_CC_PROGRAM:
-			udd_g_ctrlreq.callback = ctrl_cc_program_void;
-			return true;
 			
 		default:
 			return false;
@@ -563,7 +558,7 @@ bool main_setup_in_received(void)
 			sizeof(main_buf_loopback) );
 	*/
 	
-	static uint8_t  respbuf[128];
+	static uint8_t  respbuf[CIRCBUFSIZE];
 	unsigned int cnt;
 	
 	if (udd_g_ctrlreq.req.wLength > sizeof(respbuf)){
@@ -621,9 +616,6 @@ bool main_setup_in_received(void)
 			return V2Protocol_ProcessCommand();
 			break;
 			
-		case REQ_CC_PROGRAM:
-			return CCProtocol_ProcessCommand();
-			break;
 			
 		case REQ_USART0_CONFIG:
 			return ctrl_usart(USART_TARGET, true);
