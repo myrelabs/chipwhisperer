@@ -17,11 +17,11 @@ ifeq ($(CRYPTO_OPTIONS),AES128C)
  endif
  
 else ifeq ($(CRYPTO_OPTIONS),RSA)
- SRC += rsa.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c oid.c
+ SRC += rsa.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c oid.c 
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
     
 else ifeq ($(CRYPTO_OPTIONS),ECDSA)
- SRC += ecdsa.c ecp.c ecp_curves.c entropy.c havege.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c
+ SRC += ecdsa.c ecp.c ecp_curves.c entropy.c havege.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c error.c ctr_drbg.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
     
 else ifeq ($(CRYPTO_OPTIONS),SHA1)
