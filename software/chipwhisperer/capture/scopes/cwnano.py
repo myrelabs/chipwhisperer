@@ -589,6 +589,9 @@ class CWNano(ScopeTemplate, util.DisableNewAttr):
     def _getNAEUSB(self):
         return self._cwusb
 
+    def _getCWType(self):
+        return 'cwnano'
+
     @property
     def sn(self):
         return self._cwusb.snum
