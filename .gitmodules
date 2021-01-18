@@ -10,3 +10,6 @@
 [submodule "tutorials"]
 	path = tutorials
 	url = https://github.com/newaetech/chipwhisperer-tutorials.git
+[submodule "sc-notebooks"]
+	path = sc-notebooks
+	url = https://gitlab.com/myrelabs/sc-notebooks
