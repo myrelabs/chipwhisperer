@@ -49,12 +49,13 @@ uint8_t ecdsa_set_key(uint8_t *pt)
 
     MBEDTLS_MPI_CHK( mbedtls_mpi_read_binary( &ctx.d, pt, FIELD_LEN ) );
     MBEDTLS_MPI_CHK( mbedtls_ecp_check_privkey( &ctx.grp, &ctx.d) );
-    //trigger_high();
 
     //MBEDTLS_MPI_CHK( mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen( pers ) ) );
 
+    //trigger_high();
     //MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx.grp, &ctx.Q, &ctx.d, &ctx.grp.G, NULL, NULL ) );   //mbedtls_ctr_drbg_random, &ctr_drbg ) );
     //trigger_low();
+    //MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
     
     //MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.grp.G, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
 
