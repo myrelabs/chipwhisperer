@@ -27,6 +27,7 @@
 //#define PLAIN 2
 
 uint8_t ecdsa_set_key(uint8_t *pt);
+uint8_t ecdsa_gen_key(uint8_t *pt);
 
 int main(void)
 {
@@ -39,6 +40,7 @@ int main(void)
 
     simpleserial_init();
     simpleserial_addcmd('s', 32,  ecdsa_set_key);
+    simpleserial_addcmd('g', 0,  ecdsa_gen_key);
     while(1)
         simpleserial_get();
 }

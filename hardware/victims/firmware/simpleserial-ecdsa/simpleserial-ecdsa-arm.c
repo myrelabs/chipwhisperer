@@ -29,6 +29,53 @@ ToDo:
    then the value directly returned by e.g. ecdsa_set_key indicates whether  ret != 0
 */
 
+
+static int rand_mock = 7;
+static int myrand( void *rng_state, unsigned char *output, size_t len )
+{
+     size_t i;
+
+     if( rng_state != NULL )
+          rng_state  = NULL;
+
+     for( i = 0; i < len; ++i ) 
+          output[i] = (rand_mock++) & 0xFF;
+
+     return( 0 );
+}
+
+
+
+
+
+uint8_t ecdsa_gen_key(uint8_t *pt)
+{
+    int      ret = 0;                     //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
+    //const char *pers = "ecdsa";
+    
+    size_t   compressed_point_length;
+    mbedtls_ecdsa_context ctx;
+    //mbedtls_entropy_context entropy;
+    //mbedtls_ctr_drbg_context ctr_drbg;
+    
+    ((void*)pt);
+
+    memset(buf, 0, 1 + FIELD_LEN);
+    mbedtls_ecp_keypair_init( &ctx );  
+    MBEDTLS_MPI_CHK( mbedtls_ecp_gen_key( ECPARAMS, &ctx, myrand, NULL ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
+    simpleserial_put('r', compressed_point_length, buf);
+   
+cleanup:
+    //simpleserial_put('r', sizeof(int), (uint8_t *)&ret);
+    mbedtls_ecdsa_free( &ctx );
+    return( ret );
+}
+
+
+
+
+
 uint8_t ecdsa_set_key(uint8_t *pt)
 {
     int      ret = 0;                     //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
@@ -53,19 +100,15 @@ uint8_t ecdsa_set_key(uint8_t *pt)
     //MBEDTLS_MPI_CHK( mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen( pers ) ) );
 
     //trigger_high();
-    //MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx.grp, &ctx.Q, &ctx.d, &ctx.grp.G, NULL, NULL ) );   //mbedtls_ctr_drbg_random, &ctr_drbg ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx.grp, &ctx.Q, &ctx.d, &ctx.grp.G, NULL, NULL ) );   //mbedtls_ctr_drbg_random, &ctr_drbg ) );
     //trigger_low();
-    //MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
     
-    //MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.grp.G, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
-
-    //send back the compressed point
-    //simpleserial_put('r', compressed_point_length, buf);
-    
-    MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &ctx.d, buf, FIELD_LEN ) );
-    simpleserial_put('r', FIELD_LEN, buf);
+    //MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &ctx.grp.G.Y, buf, FIELD_LEN ) );
 
     
+    simpleserial_put('r', compressed_point_length, buf);
+   
 cleanup:
     //simpleserial_put('r', sizeof(int), (uint8_t *)&ret);
     mbedtls_ecdsa_free( &ctx );
