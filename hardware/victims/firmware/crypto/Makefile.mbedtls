@@ -22,7 +22,7 @@ else ifeq ($(CRYPTO_OPTIONS),RSA)
     
 else ifeq ($(CRYPTO_OPTIONS),ECDSA)
  SRC += ecdsa.c ecp.c ecp_curves.c entropy.c havege.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c error.c ctr_drbg.c
- CDEFS += -DMBEDTLS -DMBEDTLS_SHA
+ CDEFS += -DMBEDTLS -DMBEDTLS_SHA -DMBEDTLS_TEST_NULL_ENTROPY -DMBEDTLS_NO_DEFAULT_ENTROPY_SOURCES
     
 else ifeq ($(CRYPTO_OPTIONS),SHA1)
  SRC += sha1.c

@@ -6,8 +6,10 @@
 
 #if defined(__arm__)
 
+#include "mbedtls/config.h"
 #include "mbedtls/ecdsa.h"
-
+//#include "mbedtls/entropy.h"
+//#include "mbedtls/ctr_drbg.h"
 
 //#define mbedtls_calloc calloc
 //#define mbedtls_free free
@@ -30,23 +32,41 @@ ToDo:
 uint8_t ecdsa_set_key(uint8_t *pt)
 {
     int      ret = 0;                     //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
+    //const char *pers = "ecdsa";
+    
     size_t   compressed_point_length;
     mbedtls_ecdsa_context ctx;
+    //mbedtls_entropy_context entropy;
+    //mbedtls_ctr_drbg_context ctr_drbg;
+    
 
     memset(buf, 0, 1 + FIELD_LEN);
-    mbedtls_ecp_keypair_init( &ctx );        
+    mbedtls_ecp_keypair_init( &ctx );  
+    //mbedtls_entropy_init( &entropy );        //!!!!!!!!!!! STM32F3 entropy mbedtls HowTo
+    //mbedtls_ctr_drbg_init( &ctr_drbg );
+
     MBEDTLS_MPI_CHK( mbedtls_ecp_group_load( &ctx.grp, ECPARAMS ) );
 
     MBEDTLS_MPI_CHK( mbedtls_mpi_read_binary( &ctx.d, pt, FIELD_LEN ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_check_privkey( &ctx.grp, &ctx.d) );
     //trigger_high();
-    MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx.grp, &ctx.Q, &ctx.d, &ctx.grp.G, NULL, NULL ) );
+
+    //MBEDTLS_MPI_CHK( mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen( pers ) ) );
+
+    //MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx.grp, &ctx.Q, &ctx.d, &ctx.grp.G, NULL, NULL ) );   //mbedtls_ctr_drbg_random, &ctr_drbg ) );
     //trigger_low();
-    MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
+    
+    //MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.grp.G, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
 
     //send back the compressed point
-    simpleserial_put('r', compressed_point_length, buf);
+    //simpleserial_put('r', compressed_point_length, buf);
+    
+    MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &ctx.d, buf, FIELD_LEN ) );
+    simpleserial_put('r', FIELD_LEN, buf);
+
     
 cleanup:
+    //simpleserial_put('r', sizeof(int), (uint8_t *)&ret);
     mbedtls_ecdsa_free( &ctx );
     return( ret );
 }
