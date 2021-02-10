@@ -39,7 +39,7 @@ static int myrand( void *rng_state, unsigned char *output, size_t len )
           rng_state  = NULL;
 
      for( i = 0; i < len; ++i ) 
-          output[i] = (rand_mock++) & 0xFF;
+          output[i] = ((1117*rand_mock++)%513) & 0xFF;
 
      return( 0 );
 }
