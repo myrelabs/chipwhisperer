@@ -39,7 +39,7 @@ static int myrand( void *rng_state, unsigned char *output, size_t len )
           rng_state  = NULL;
 
      for( i = 0; i < len; ++i ) 
-          output[i] = ((1117*rand_mock++)%513) & 0xFF;
+          output[i] = ((274*(rand_mock++)+413)%513) & 0xFF;
 
      return( 0 );
 }
@@ -63,7 +63,9 @@ uint8_t ecdsa_gen_key(uint8_t *pt)
     memset(buf, 0, 1 + FIELD_LEN);
     mbedtls_ecp_keypair_init( &ctx );  
     MBEDTLS_MPI_CHK( mbedtls_ecp_gen_key( ECPARAMS, &ctx, myrand, NULL ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_check_pub_priv( &ctx, &ctx) );
     MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf, 1 + FIELD_LEN ) );
+    
     simpleserial_put('r', compressed_point_length, buf);
    
 cleanup:
@@ -93,7 +95,6 @@ uint8_t ecdsa_set_key(uint8_t *pt)
     //mbedtls_ctr_drbg_init( &ctr_drbg );
 
     MBEDTLS_MPI_CHK( mbedtls_ecp_group_load( &ctx.grp, ECPARAMS ) );
-
     MBEDTLS_MPI_CHK( mbedtls_mpi_read_binary( &ctx.d, pt, FIELD_LEN ) );
     MBEDTLS_MPI_CHK( mbedtls_ecp_check_privkey( &ctx.grp, &ctx.d) );
 
