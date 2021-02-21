@@ -17,7 +17,6 @@ int main(void)
     init_uart();
     trigger_setup();
 
-    /* Load all the keys etc */
     ecdsa_init();
 
     simpleserial_init();

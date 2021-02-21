@@ -159,7 +159,7 @@ static uint32_t myrand(void)
 
 
 
-void init(void) 
+void comb_init(void) 
 {
     int i;
     
@@ -176,7 +176,7 @@ void init(void)
 }
 
 
-my_ecp_point* copyTSource(void)
+static my_ecp_point* copyTSource(void)
 {
     int           i;
     uint32_t      startIndex;
@@ -215,6 +215,8 @@ uint8_t select_comb_from_TCopy(uint8_t *pt)
     trigger_high();
     my_ecp_select_comb( modulus, &R, TCopy, SIZE_OF_T, *pt);
     trigger_low();
+    
+    simpleserial_put('r', sizeof(uint32_t), (uint8_t *)&R.X.v);
     
     return 0;
 }
