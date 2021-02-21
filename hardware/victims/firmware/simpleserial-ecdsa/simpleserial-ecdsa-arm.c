@@ -1,4 +1,4 @@
-#include "hal.h"
+//#include "hal.h"
 #include "simpleserial.h"
 #include <string.h>
 #include <stdint.h>
@@ -34,8 +34,8 @@ Replace NULL arguments of the mbedtls_ecp_mul call below with f_rng function: ct
 for entropy source - check  https://tls.mbed.org/kb/how-to/how_to_integrate_nv_seed
 */
 
-
-static int rand_mock = 7;
+//Xorshift RNGs
+static uint32_t seed = 7;
 static int myrand( void *rng_state, unsigned char *output, size_t len )
 {
      size_t i;
@@ -43,11 +43,16 @@ static int myrand( void *rng_state, unsigned char *output, size_t len )
      if( rng_state != NULL )
           rng_state  = NULL;
 
-     for( i = 0; i < len; ++i ) 
-          output[i] = ((274*(rand_mock++)+413)%513) & 0xFF;
+     for( i = 0; i < len; ++i ) {
+        seed ^= (seed << 13);
+        seed ^= (seed >> 17);
+        seed ^= (seed << 5);         
+        output[i] = seed & 0x000000FF;
+     }     
 
      return( 0 );
 }
+
 
 
 
