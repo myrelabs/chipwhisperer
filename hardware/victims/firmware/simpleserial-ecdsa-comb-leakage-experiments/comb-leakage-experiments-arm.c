@@ -44,11 +44,11 @@ static void my_ecp_safe_invert_jac( uint32_t p,
     unsigned char nonzero;
     my_mpi mQY;
     
-    mQY.s = 0;
+    mQY.s = 1;
     mQY.v = 0;
 
     /* Use the fact that -Q.Y mod P = P - Q.Y unless Q.Y == 0 */
-    mQY = p - Q->Y;
+    mQY.v = p - Q->Y.v;
     nonzero = Q->Y.v != 0;
     my_mpi_safe_cond_assign( &Q->Y, &mQY, inv & nonzero );
 }
@@ -73,7 +73,8 @@ static void my_ecp_safe_invert_jac( uint32_t p,
  *   (the result will be incorrect if these assumptions are not satisfied)
  */
  
- 
+
+/* 
 static void ecp_comb_fixed( unsigned char x[], size_t d,
                             unsigned char w, const mbedtls_mpi *m )
 {
@@ -82,28 +83,24 @@ static void ecp_comb_fixed( unsigned char x[], size_t d,
 
     memset( x, 0, d+1 );
 
-    /* First get the classical comb values (except for x_d = 0) */
     for( i = 0; i < d; i++ )
         for( j = 0; j < w; j++ )
             x[i] |= mbedtls_mpi_get_bit( m, i + d * j ) << j;
 
-    /* Now make sure x_1 .. x_d are odd */
     c = 0;
     for( i = 1; i <= d; i++ )
     {
-        /* Add carry and update it */
         cc   = x[i] & c;
         x[i] = x[i] ^ c;
         c = cc;
 
-        /* Adjust if needed, avoiding branches */
         adjust = 1 - ( x[i] & 0x01 );
         c   |= x[i] & ( x[i-1] * adjust );
         x[i] = x[i] ^ ( x[i-1] * adjust );
         x[i-1] |= adjust << 7;
     }
 }
-
+*/
 
 
 /*
@@ -113,7 +110,6 @@ static void my_ecp_select_comb( uint32_t p, my_ecp_point *R,
                             const my_ecp_point T[], unsigned char t_len,
                             unsigned char i )
 {
-    int ret;
     unsigned char ii, j;
 
     /* Ignore the "sign" bit and scale down */
@@ -127,7 +123,7 @@ static void my_ecp_select_comb( uint32_t p, my_ecp_point *R,
     }
 
     /* Safely invert result if i is "negative" */
-    my_ecp_safe_invert_jac( grp, R, i >> 7 );
+    my_ecp_safe_invert_jac( p, R, i >> 7 );
 }
 
 
@@ -200,7 +196,7 @@ static my_ecp_point* copyTSource(void)
 //reseed is needed after restart, to avoid using the old path after the init() function
 uint8_t reseed(uint8_t *pt)
 {
-    set_seed(*((uint32_t*)pt))
+    set_seed(*((uint32_t*)pt));
     
     return 0;
 }
