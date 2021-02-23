@@ -172,7 +172,7 @@ void comb_init(void)
 }
 
 
-static my_ecp_point* copyTSource(void)
+static uint32_t copyTSource(void)
 {
     int           i;
     uint32_t      startIndex;
@@ -189,7 +189,7 @@ static my_ecp_point* copyTSource(void)
         TCopy[i].Y.v = TSource[i].Y.v;
     }
     
-    return TCopy;
+    return startIndex;
 }
 
 
@@ -204,24 +204,24 @@ uint8_t reseed(uint8_t *pt)
 
 uint8_t select_comb_from_TCopy(uint8_t *pt)
 {
+    uint32_t     startIndex;
+//  uint32_t     output[2];
     my_ecp_point *TCopy;
     my_ecp_point R;
     
-    TCopy = copyTSource();  //the array is copied to not include dependencies from the addresses of elements of T in the template
+    startIndex = copyTSource();  //the array is copied to not include dependencies from the addresses of elements of T in the template
+    TCopy = TBuffer + startIndex;
     trigger_high();
     my_ecp_select_comb( modulus, &R, TCopy, SIZE_OF_T, *pt);
     trigger_low();
     
-    simpleserial_put('r', sizeof(uint32_t), (uint8_t *)&R.X.v);
+//  output[0] = R.X.v;
+//  output[1] = startIndex;   
+    
+//  simpleserial_put('r', 2*sizeof(uint32_t), (uint8_t*)output);
     
     return 0;
 }
-
-
-
-/*
-ustwic zegary na zgodne na czas odczytu cykli zegara
-*/
 
 
 
