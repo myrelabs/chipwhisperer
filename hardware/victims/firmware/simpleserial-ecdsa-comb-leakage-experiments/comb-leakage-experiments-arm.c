@@ -129,10 +129,12 @@ static void my_ecp_select_comb( uint32_t p, my_ecp_point *R,
 
 #define SIZE_OF_T 16
 static my_ecp_point TSource[SIZE_OF_T];
-static my_ecp_point TBuffer[511+SIZE_OF_T];
 
 static uint32_t seed = 0;
 static uint32_t modulus = 0;
+
+static my_ecp_point TBuffer[511+SIZE_OF_T];
+
 
 
 
@@ -224,4 +226,21 @@ uint8_t select_comb_from_TCopy(uint8_t *pt)
 }
 
 
+
+uint8_t select_comb_from_TSource(uint8_t *pt)
+{
+//  uint32_t     output[2];
+    my_ecp_point R;
+    
+    trigger_high();
+    my_ecp_select_comb( modulus, &R, TSource, SIZE_OF_T, *pt);
+    trigger_low();
+    
+//  output[0] = R.X.v;
+//  output[1] = startIndex;   
+    
+//  simpleserial_put('r', 2*sizeof(uint32_t), (uint8_t*)output);
+    
+    return 0;
+}
 
