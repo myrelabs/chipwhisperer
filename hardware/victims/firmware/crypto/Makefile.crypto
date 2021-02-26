@@ -58,6 +58,15 @@ else ifeq ($(CRYPTO_TARGET),MBEDTLS)
 #
   include $(FIRMWAREPATH)/crypto/Makefile.mbedtls
 
+else ifeq ($(CRYPTO_TARGET),WOLFSSL)
+#
+# Crypto Target: WOLFSSL
+# Crypto Options:
+#    ?
+# Notes:
+#
+  include $(FIRMWAREPATH)/crypto/Makefile.wolfssl
+
 else ifeq ($(CRYPTO_TARGET),MASKEDAES)
   include $(FIRMWAREPATH)/crypto/Makefile.maskedaes
 
@@ -65,6 +74,15 @@ else ifeq ($(CRYPTO_TARGET),HWAES)
   CFLAGS += -DHWCRYPTO=1
   CPPFLAGS += -DHWCRYPTO=1
   SRC += aes-independant.c
+
+else ifeq ($(CRYPTO_TARGET),SIMPLESALSA)
+#
+# Crypto Target: SIMPLESALSA
+# Crypto Options:
+#    None
+# Notes:
+#
+  include $(FIRMWAREPATH)/crypto/Makefile.simple-salsa
 
 else ifeq ($(CRYPTO_TARGET),MICROECC)
   include $(FIRMWAREPATH)/crypto/Makefile.micro-ecc

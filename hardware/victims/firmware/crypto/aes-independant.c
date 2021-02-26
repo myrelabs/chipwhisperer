@@ -46,12 +46,30 @@ void aes_indep_enc(uint8_t * pt)
     HW_AES128_Enc(pt);
 }
 
+#ifdef AES_DECRYPT
+void aes_indep_dec_pretrigger(uint8_t * pt)
+{
+    HW_AES128_Dec_pretrigger(pt);
+}
+
+void aes_indep_dec_posttrigger(uint8_t * pt)
+{
+    HW_AES128_Dec_posttrigger(pt);
+}
+
+void aes_indep_dec(uint8_t * pt)
+{
+    HW_AES128_Dec(pt);
+}
+#endif
+
 void aes_indep_mask(uint8_t * m)
 {
 }
 
 #elif defined(AVRCRYPTOLIB)
 #include "aes128_enc.h"
+#include "aes128_dec.h"
 #include "aes_keyschedule.h"
 
 aes128_ctx_t ctx;
@@ -80,6 +98,23 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
 {
     ;
 }
+
+#ifdef AES_DECRYPT
+void aes_indep_dec(uint8_t * pt)
+{
+	aes128_dec(pt, &ctx); /* encrypting the data block */
+}
+
+void aes_indep_dec_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * pt)
+{
+    ;
+}
+#endif
 
 void aes_indep_mask(uint8_t * m)
 {
@@ -205,11 +240,17 @@ void aes_indep_mask(uint8_t * m)
 #elif defined(MBEDTLS)
 #include "mbedtls/aes.h"
 
-mbedtls_aes_context ctx;
+static mbedtls_aes_context enc_ctx;
+#ifdef AES_DECRYPT
+static mbedtls_aes_context dec_ctx;
+#endif
 
 void aes_indep_init(void)
 {
-	mbedtls_aes_init(&ctx);
+	mbedtls_aes_init(&enc_ctx);
+    #ifdef AES_DECRYPT
+    mbedtls_aes_init(&dec_ctx);
+    #endif
 }
 
 void aes_indep_enc_pretrigger(uint8_t * pt)
@@ -224,13 +265,99 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
 
 void aes_indep_key(uint8_t * key)
 {
-	mbedtls_aes_setkey_enc(&ctx, key, 128);
+	mbedtls_aes_setkey_enc(&enc_ctx, key, 128);
+    #ifdef AES_DECRYPT
+	mbedtls_aes_setkey_dec(&dec_ctx, key, 128);
+    #endif
 }
 
 void aes_indep_enc(uint8_t * pt)
 {
-	mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, pt, pt); /* encrypting the data block */
+	mbedtls_aes_crypt_ecb(&enc_ctx, MBEDTLS_AES_ENCRYPT, pt, pt); /* encrypting the data block */
 }
+
+#ifdef AES_DECRYPT
+void aes_indep_dec_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_dec(uint8_t * ct)
+{
+	mbedtls_aes_crypt_ecb(&dec_ctx, MBEDTLS_AES_DECRYPT, ct, ct); /* decrypting the data block */
+}
+#endif
+
+void aes_indep_mask(uint8_t * m)
+{
+}
+
+#elif defined(WOLFSSL)
+
+// FIXME: add target-dependent default headers
+#include <user_settings_arm.h>
+#include <wolfssl/wolfcrypt/aes.h>
+
+static Aes enc_ctx;
+#ifdef AES_DECRYPT
+static Aes dec_ctx;
+#endif
+
+void aes_indep_init(void)
+{
+	wc_AesInit(&enc_ctx, NULL, INVALID_DEVID);
+    #ifdef AES_DECRYPT
+    wc_AesInit(&dec_ctx, NULL, INVALID_DEVID);
+    #endif
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_key(uint8_t * key)
+{
+    uint8_t t[16] = {0};
+	wc_AesSetKeyDirect(&enc_ctx, key, 16, t, AES_ENCRYPTION);
+    #ifdef AES_DECRYPT
+	wc_AesSetKeyDirect(&dec_ctx, key, 16, t, AES_DECRYPTION);
+    #endif
+}
+
+void aes_indep_enc(uint8_t * pt)
+{
+    uint8_t t[16];
+    wc_AesEncryptDirect(&enc_ctx, t, pt); /* encrypting the data block */
+    memcpy(pt, t, 16);
+}
+
+#ifdef AES_DECRYPT
+void aes_indep_dec_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_dec(uint8_t * ct)
+{
+	wc_AesDecryptDirect(&dec_ctx, ct, ct); /* decrypting the data block */
+}
+#endif
 
 void aes_indep_mask(uint8_t * m)
 {
