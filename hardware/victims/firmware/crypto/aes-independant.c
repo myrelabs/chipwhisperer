@@ -63,7 +63,7 @@ void aes_indep_dec(uint8_t * pt)
 }
 #endif
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -116,7 +116,7 @@ void aes_indep_dec_posttrigger(uint8_t * pt)
 }
 #endif
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -154,7 +154,7 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
     ;
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -198,7 +198,7 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
     ;
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -233,7 +233,7 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
     ;
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -293,7 +293,7 @@ void aes_indep_dec(uint8_t * ct)
 }
 #endif
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -359,7 +359,7 @@ void aes_indep_dec(uint8_t * ct)
 }
 #endif
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -400,7 +400,7 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
     pt[i] = input[i];
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
   int i;
   for (i = 0; i < AESMaskSize; i++)
