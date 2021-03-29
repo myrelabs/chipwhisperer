@@ -28,6 +28,10 @@ else ifeq ($(CRYPTO_OPTIONS),RSA)
 else ifeq ($(CRYPTO_OPTIONS),SHA1)
  SRC += sha1.c platform_util.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
+
+else ifeq ($(CRYPTO_OPTIONS),CTR_DRBG)
+ SRC += aes.c ctr_drbg.c platform_util.c
+ CDEFS += -DMBEDTLS
     
 else
 
