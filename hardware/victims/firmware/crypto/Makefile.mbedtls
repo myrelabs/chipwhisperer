@@ -9,12 +9,17 @@ ifeq ($(CRYPTO_OPTIONS),AES128C)
  #######
  #*This is the recommended first version to test* 
  SRC += aes.c platform_util.c
- CDEFS += -DMBEDTLS -DMBEDTLS_SHA1_C
+ CDEFS += -DMBEDTLS
  
  ifeq ($(MBEDTLS_AES_ROM_TABLES),)
  else
  CDEFS += -DMBEDTLS_AES_ROM_TABLES=$(MBEDTLS_AES_ROM_TABLES)
  endif
+
+else ifeq ($(CRYPTO_OPTIONS),CHACHA)
+ SRC += chacha-independant.c
+ SRC += chacha20.c platform_util.c
+ CDEFS += -DMBEDTLS
  
 else ifeq ($(CRYPTO_OPTIONS),RSA)
  SRC += rsa.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c oid.c platform_util.c

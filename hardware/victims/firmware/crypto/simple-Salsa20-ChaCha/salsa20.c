@@ -10,7 +10,7 @@
 /* Constant "expand 32-byte k" */
 static const uint32_t sc[4] = { 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574 };
 
-#define ROTL(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define ROTL(a,b) ((((a) << (b)) | ((a) >> (32 - (b)))) & 0xFFFFFFFF)
 
 #define QR(a, b, c, d) do { \
     b ^= ROTL(a + d, 7);    \
@@ -61,6 +61,7 @@ void salsa20_block(salsa_context_t* ctx)
 
 #undef QR
 #undef ROUNDS
+#undef STATE_CONTEXT_MAP
 
 
 #define QR(a, b, c, d) do {              \
@@ -112,6 +113,7 @@ void chacha_block(chacha_context_t* ctx)
 
 #undef QR
 #undef ROUNDS
+#undef STATE_CONTEXT_MAP
 
 #define LOAD_LE_32(a)      ( ((uint32_t)(*(a)))           + \
                              ((uint32_t)(*((a)+1)) <<  8) + \
@@ -139,10 +141,10 @@ void salsa20_setkey(salsa_context_t *ctx, uint8_t *key)
 typedef void (*block_function_t)(salsa_context_t *ctx);
 
 #define GETBLOCK(bf) do { \
-        ctx->nonce[0] = (uint32_t)((nonce)         & 0xFFFFFFFFu); \
-        ctx->nonce[1] = (uint32_t)((nonce >> 32)   & 0xFFFFFFFFu); \
         ctx->ctr[0]   = (uint32_t)((counter)       & 0xFFFFFFFFu); \
         ctx->ctr[1]   = (uint32_t)((counter >> 32) & 0xFFFFFFFFu); \
+        ctx->nonce[0] = (uint32_t)((nonce)         & 0xFFFFFFFFu); \
+        ctx->nonce[1] = (uint32_t)((nonce >> 32)   & 0xFFFFFFFFu); \
         bf(ctx);          \
         STORE_LE_32(out +  0, ctx->state[ 0]); \
         STORE_LE_32(out +  4, ctx->state[ 1]); \
