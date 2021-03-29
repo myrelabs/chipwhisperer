@@ -1,8 +1,8 @@
+#include <stdlib.h>
+#include <string.h>
+//#include <stdint.h>
 //#include "hal.h"
 #include "simpleserial.h"
-#include <string.h>
-#include <stdint.h>
-#include <stdlib.h>
 
 #if defined(__arm__)
 
@@ -19,7 +19,7 @@
 
 
 static int  key_is_empty;
-mbedtls_ecdsa_context ctx;
+static mbedtls_ecdsa_context ctx;
 
 
 void ecdsa_init(void)

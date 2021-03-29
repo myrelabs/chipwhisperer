@@ -21,7 +21,7 @@ int main(void)
     comb_init();
 
     simpleserial_init();
-    simpleserial_addcmd('t', 1, select_comb_from_TCopy);
+    simpleserial_addcmd('t', 17, select_comb_from_TCopy);
     simpleserial_addcmd('a', 1, select_comb_from_TSource);
     simpleserial_addcmd('r', 4, reseed);
     while(1)
