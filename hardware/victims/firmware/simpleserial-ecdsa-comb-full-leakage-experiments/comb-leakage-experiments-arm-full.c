@@ -31,7 +31,7 @@ static size_t d;
 #define ADDITIONAL_SIZE 33
 static mbedtls_ecp_point TSource[SIZE_OF_T];
 static mbedtls_ecp_point TBuffer[ADDITIONAL_SIZE+SIZE_OF_T];
-
+static mbedtls_ecp_point R;
 
 
 static uint32_t seed = 0;
@@ -67,6 +67,8 @@ void comb_init(void)
     for( i = 0; i < SIZE_OF_T; i++ )
        mbedtls_ecp_point_init( &TSource[i] ); 
     ecp_precompute_comb_copy(&grp, TSource, &grp.G, w, d);
+
+    mbedtls_ecp_point_init( &R );    
 
     set_seed(0x29D14CA8);   //carefully chosen, trully random seed ;)
 }
@@ -128,10 +130,7 @@ uint8_t select_comb_from_TCopy(uint8_t *pt)
     int      ret = 0;
     uint8_t  buf_for_ec_point[2*(FIELD_LEN)]; 
     mbedtls_ecp_point* TCopy;
-    mbedtls_ecp_point R;
  
-    mbedtls_ecp_point_init( &R );    
-    memset(buf_for_ec_point, 0, 2*(FIELD_LEN));
     MBEDTLS_MPI_CHK( copyTSource(&TCopy, pt+1) );  //the array is copied to not include dependencies from the addresses of elements of T in the template
 
     trigger_high();
@@ -144,7 +143,6 @@ uint8_t select_comb_from_TCopy(uint8_t *pt)
 
 cleanup:
     freePointsOfTCopy(TCopy);
-    mbedtls_ecp_point_free( &R );
     if (ret) simpleserial_put('r', sizeof(int), (uint8_t *)&ret);
 
     return ret; 
@@ -160,11 +158,7 @@ uint8_t select_comb_from_TSource(uint8_t *pt)
 {
     int      ret = 0;
     uint8_t  buf_for_ec_point[2*(FIELD_LEN)]; 
-    mbedtls_ecp_point R;
  
-    mbedtls_ecp_point_init( &R );    
-    memset(buf_for_ec_point, 0, 2*(FIELD_LEN));
-
     trigger_high();
     MBEDTLS_MPI_CHK( ecp_select_comb_copy( &grp, &R, TSource, SIZE_OF_T, *pt) );
     trigger_low();
@@ -174,7 +168,6 @@ uint8_t select_comb_from_TSource(uint8_t *pt)
     simpleserial_put('r', 2*FIELD_LEN, buf_for_ec_point);
 
 cleanup:
-    mbedtls_ecp_point_free( &R );
     if (ret) simpleserial_put('r', sizeof(int), (uint8_t *)&ret);
     
     return ret;
