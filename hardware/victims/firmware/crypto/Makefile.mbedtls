@@ -8,7 +8,7 @@ ifeq ($(CRYPTO_OPTIONS),AES128C)
 
  #######
  #*This is the recommended first version to test* 
- SRC += aes.c
+ SRC += aes.c platform_util.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA1_C
  
  ifeq ($(MBEDTLS_AES_ROM_TABLES),)
@@ -17,15 +17,15 @@ ifeq ($(CRYPTO_OPTIONS),AES128C)
  endif
  
 else ifeq ($(CRYPTO_OPTIONS),RSA)
- SRC += rsa.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c oid.c 
+ SRC += rsa.c bignum.c md.c md5.c sha1.c sha256.c sha512.c ripemd160.c oid.c platform_util.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
     
 else ifeq ($(CRYPTO_OPTIONS),ECDSA)
- SRC += ecdsa.c ecp.c ecp_curves.c bignum.c md.c md5.c md_wrap.c sha1.c sha256.c sha512.c ripemd160.c error.c hmac_drbg.c
+ SRC += ecdsa.c ecp.c ecp_curves.c bignum.c md.c md5.c sha1.c sha256.c sha512.c ripemd160.c error.c hmac_drbg.c  platform_util.c  platform.c memory_buffer_alloc.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA 
     
 else ifeq ($(CRYPTO_OPTIONS),SHA1)
- SRC += sha1.c
+ SRC += sha1.c platform_util.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
     
 else

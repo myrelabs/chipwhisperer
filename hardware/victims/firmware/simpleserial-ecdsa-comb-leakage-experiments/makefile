@@ -38,8 +38,8 @@ SRC += comb-leakage-experiments.c comb-leakage-experiments-arm.c
 
 # -----------------------------------------------------------------------------
 
-CRYPTO_TARGET = MBEDTLS
-CRYPTO_OPTIONS = ECDSA
+CRYPTO_TARGET = NONE
+CRYPTO_OPTIONS = NONE
 
 #Add simpleserial project to build
 include ../simpleserial/Makefile.simpleserial
