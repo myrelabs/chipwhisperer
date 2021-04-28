@@ -16,8 +16,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mt.h"
-
 //#include "aes-independant.h"
 #include "hal.h"
 #include "simpleserial.h"
@@ -49,6 +47,9 @@ void set_key(uint8_t *keyaddr)
 
 void init(void)
 {
+    /* Uncomment this for manual clock setup */
+
+    /*
     RCC_ClkInitTypeDef RCC_ClkInitStruct;
 	RCC_ClkInitStruct.ClockType      = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
 	RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_HSE;
@@ -57,6 +58,7 @@ void init(void)
 	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 	uint32_t flash_latency = 5;
 	HAL_RCC_ClockConfig(&RCC_ClkInitStruct, flash_latency);
+    */
 
     __HAL_RCC_CRYP_CLK_ENABLE();
 
@@ -66,11 +68,6 @@ void init(void)
     set_key(hw_key);
 
     CRYP->CR |= CRYP_CR_ALGOMODE_AES_ECB;
-}
-
-void seed_rng(uint8_t *buf)
-{
-    // 
 }
 
 void crypt(uint8_t *buffer)
@@ -177,19 +174,19 @@ void crypt_twice(uint8_t* buffer)
     CRYP->CR = CR_di;
 }
 
-uint8_t get_mask(uint8_t* m)
+uint8_t get_mask(uint8_t* m, uint8_t len)
 {
     //aes_indep_mask(m);
     return 0x00;
 }
 
-uint8_t get_key(uint8_t* k)
+uint8_t get_key(uint8_t* k, uint8_t len)
 {
 	set_key(k);
 	return 0x00;
 }
 
-uint8_t get_pt(uint8_t* pt)
+uint8_t get_pt(uint8_t* pt, uint8_t len)
 {
 	//trigger_high();
 	crypt_twice(pt); /* encrypting the data block */
@@ -198,7 +195,7 @@ uint8_t get_pt(uint8_t* pt)
 	return 0x00;
 }
 
-uint8_t reset(uint8_t* x)
+uint8_t reset(uint8_t* x, uint8_t len)
 {
     // Reset key here if needed
 	return 0x00;
@@ -214,12 +211,14 @@ int main(void)
 
     /* Uncomment this to get a HELLO message for debug */
 
+    /*
     putch('h');
     putch('e');
     putch('l');
     putch('l');
     putch('o');
     putch('\n');
+    */
 
 	simpleserial_init();
     simpleserial_addcmd('k', 16, get_key);

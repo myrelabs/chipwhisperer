@@ -39,7 +39,7 @@ SRC += simpleserial-aes.c
 # -----------------------------------------------------------------------------
 
 ifeq ($(CRYPTO_TARGET),)
-CRYPTO_TARGET = AVRCRYPTOLIB
+CRYPTO_TARGET = HWAES
 endif
 
 ifeq ($(CRYPTO_OPTIONS),)
