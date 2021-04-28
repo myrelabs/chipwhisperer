@@ -47,9 +47,9 @@ void aes_indep_enc(uint8_t * pt);
 void aes_indep_enc_pretrigger(uint8_t * pt);
 void aes_indep_enc_posttrigger(uint8_t * pt);
 #ifdef AES_DECRYPT
-void aes_indep_dec(uint8_t * pt);
-void aes_indep_dec_pretrigger(uint8_t * pt);
-void aes_indep_dec_posttrigger(uint8_t * pt);
+void aes_indep_dec(uint8_t * ct);
+void aes_indep_dec_pretrigger(uint8_t * ct);
+void aes_indep_dec_posttrigger(uint8_t * ct);
 #endif
 void aes_indep_mask(uint8_t * m, uint8_t len);
 

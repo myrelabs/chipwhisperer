@@ -47,19 +47,19 @@ void aes_indep_enc(uint8_t * pt)
 }
 
 #ifdef AES_DECRYPT
-void aes_indep_dec_pretrigger(uint8_t * pt)
+void aes_indep_dec_pretrigger(uint8_t * ct)
 {
-    HW_AES128_Dec_pretrigger(pt);
+    HW_AES128_Dec_pretrigger(ct);
 }
 
-void aes_indep_dec_posttrigger(uint8_t * pt)
+void aes_indep_dec_posttrigger(uint8_t * ct)
 {
-    HW_AES128_Dec_posttrigger(pt);
+    HW_AES128_Dec_posttrigger(ct);
 }
 
-void aes_indep_dec(uint8_t * pt)
+void aes_indep_dec(uint8_t * ct)
 {
-    HW_AES128_Dec(pt);
+    HW_AES128_Dec(ct);
 }
 #endif
 
@@ -100,17 +100,17 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
 }
 
 #ifdef AES_DECRYPT
-void aes_indep_dec(uint8_t * pt)
+void aes_indep_dec(uint8_t * ct)
 {
-	aes128_dec(pt, &ctx); /* encrypting the data block */
+	aes128_dec(ct, &ctx); /* decrypting the data block */
 }
 
-void aes_indep_dec_pretrigger(uint8_t * pt)
+void aes_indep_dec_pretrigger(uint8_t * ct)
 {
     ;
 }
 
-void aes_indep_dec_posttrigger(uint8_t * pt)
+void aes_indep_dec_posttrigger(uint8_t * ct)
 {
     ;
 }
@@ -233,6 +233,23 @@ void aes_indep_enc_posttrigger(uint8_t * pt)
     ;
 }
 
+#ifdef AES_DECRYPT
+void aes_indep_dec(uint8_t * ct)
+{
+	AES128_ECB_indp_crypto_dec(ct);
+}
+
+void aes_indep_dec_pretrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * ct)
+{
+    ;
+}
+#endif
+
 void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
@@ -277,12 +294,12 @@ void aes_indep_enc(uint8_t * pt)
 }
 
 #ifdef AES_DECRYPT
-void aes_indep_dec_pretrigger(uint8_t * pt)
+void aes_indep_dec_pretrigger(uint8_t * ct)
 {
     ;
 }
 
-void aes_indep_dec_posttrigger(uint8_t * pt)
+void aes_indep_dec_posttrigger(uint8_t * ct)
 {
     ;
 }
@@ -343,12 +360,12 @@ void aes_indep_enc(uint8_t * pt)
 }
 
 #ifdef AES_DECRYPT
-void aes_indep_dec_pretrigger(uint8_t * pt)
+void aes_indep_dec_pretrigger(uint8_t * ct)
 {
     ;
 }
 
-void aes_indep_dec_posttrigger(uint8_t * pt)
+void aes_indep_dec_posttrigger(uint8_t * ct)
 {
     ;
 }
