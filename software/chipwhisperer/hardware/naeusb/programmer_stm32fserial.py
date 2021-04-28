@@ -28,7 +28,6 @@ import time
 import traceback
 from datetime import datetime
 from chipwhisperer.capture.utils.IntelHex import IntelHex
-from chipwhisperer.common.utils.timer import nonBlockingDelay
 from functools import reduce, wraps
 
 def close_on_fail(func):
@@ -48,6 +47,14 @@ def close_on_fail(func):
 class STM32FDummy(object):
     signature = 0x000
     name = "Unknown STM32F"
+
+class STM32F03xx4(object):
+    signature = 0x444
+    name = "STM32F03xx4/03xx6"
+
+class STM32F04xxx(object):
+    signature = 0x445
+    name = "STM32F04xxx"
 
 class STM32F071(object):
     signature = 0x448
@@ -89,8 +96,12 @@ class STM32F40xxx(object):
     signature = 0x413
     name = "STM32F40xxx/41xxx"
 
-supported_stm32f = [STM32F071(), STM32F10xxx_LD(), STM32F10xxx_MD(), STM32F10xxx_HD(), STM32F10xxx_XL(), STM32F10xxx_MDV(),
-                    STM32F10xxx_HDV(), STM32F2(), STM32F303cBC(), STM32F40xxx()]
+class STM32L56xxx(object):
+    signature = 0x472
+    name = "STM32L56xxx"
+
+supported_stm32f = [STM32F03xx4(), STM32F04xxx(), STM32F071(), STM32F10xxx_LD(), STM32F10xxx_MD(), STM32F10xxx_HD(), STM32F10xxx_XL(), STM32F10xxx_MDV(),
+                    STM32F10xxx_HDV(), STM32F2(), STM32F303cBC(), STM32F40xxx(), STM32L56xxx()]
 
 def print_fun(s):
     print(s)
@@ -194,6 +205,7 @@ class STM32FSerial(object):
         logfunc("STM32F Programming %s..." % memtype)
         if waitfunc: waitfunc()
         self.writeMemory(startaddr, fdata)  # , erasePage=True
+        #self.write_verify(startaddr, fdata)
 
         logfunc("STM32F Reading %s..." % memtype)
         if waitfunc: waitfunc()
@@ -473,7 +485,11 @@ class STM32FSerial(object):
             # Checksum
             self.sp.write(chr(0x00))
             tmp = self.sp.timeout
-            self.sp.timeout = 30000
+            if self._chip.name == STM32F40xxx().name:
+                self.sp.timeout = 1000000 #TODO HACK - serial timeout is screwed up for some reason
+            else:
+                self.sp.timeout = 30000
+                                      # Need to fix that eventually.
             print("Extended erase (0x44), this can take ten seconds or more")
             self._wait_for_ask("0x44 erasing failed")
             self.sp.timeout = tmp
@@ -482,6 +498,7 @@ class STM32FSerial(object):
             raise CmdException("Extended Erase memory (0x44) failed")
 
     def cmdWriteProtect(self, sectors):
+        # generates system reset upon success, programmer needs to be reopened again
         if self.cmdGeneric(0x63):
             logging.info("*** Write protect command")
             self.sp.write(chr((len(sectors) - 1) & 0xFF))
@@ -496,34 +513,43 @@ class STM32FSerial(object):
             raise CmdException("Write Protect memory (0x63) failed")
 
     def cmdWriteUnprotect(self):
+        # generates system reset upon success, programmer needs to be reopened again
         if self.cmdGeneric(0x73):
             logging.info("*** Write Unprotect command")
             self._wait_for_ask("0x73 write unprotect failed")
-            self._wait_for_ask("0x73 write unprotect 2 failed")
             logging.info("    Write Unprotect done")
         else:
             raise CmdException("Write Unprotect (0x73) failed")
 
     def cmdReadoutProtect(self):
+        # generates system reset upon success, programmer needs to be reopened again
         if self.cmdGeneric(0x82):
             logging.info("*** Readout protect command")
             self._wait_for_ask("0x82 readout protect failed")
-            self._wait_for_ask("0x82 readout protect 2 failed")
             logging.info("    Read protect done")
         else:
             raise CmdException("Readout protect (0x82) failed")
 
     def cmdReadoutUnprotect(self):
+        # generates system reset upon success, programmer needs to be reopened again
         if self.cmdGeneric(0x92):
             logging.info("*** Readout Unprotect command")
             self._wait_for_ask("0x92 readout unprotect failed")
-            self._wait_for_ask("0x92 readout unprotect 2 failed")
             logging.info("    Read Unprotect done")
         else:
             raise CmdException("Readout unprotect (0x92) failed")
 
 
             # Complex commands section
+
+    @close_on_fail
+    def simple_verify(self, addr, fdata, smallblocks=False):
+        lng = len(fdata)
+        data = self.readMemory(addr, lng, smallblocks)
+        for i in range(len(data)):
+            if fdata[i] != data[i]:
+                raise IOError("Verify failed at 0x%04x, %x != %x" % (i, fdata[i], data[i]))
+
 
     @close_on_fail
     def verifyMemory(self, addr, fdata, smallblocks=False):
@@ -533,7 +559,7 @@ class STM32FSerial(object):
         if smallblocks:
             block_size = 64
         else:
-            block_size = 256
+            block_size = 128
 
         lng = len(fdata)
 
@@ -550,9 +576,9 @@ class STM32FSerial(object):
             for i in range(0, len(data)):
                 if fdata[i+fdata_idx] != data[i]:
                     fails += 1
-                    logging.info("Verify failed at 0x%04x, %x != %x" % (i, fdata[i+fdata_idx], data[i]))
+                    logging.info("Verify failed at 0x%04x, %x != %x" % (i+fdata_idx, fdata[i+fdata_idx], data[i]))
                     if fails > 3:
-                        raise IOError("Verify failed at 0x%04x, %x != %x" % (i, fdata[i+fdata_idx], data[i]))
+                        raise IOError("Verify failed at 0x%04x, %x != %x" % (i+fdata_idx, fdata[i+fdata_idx], data[i]))
                     else:
                         #Redo this block
                         logging.info("Read error - attempting retry")
@@ -621,6 +647,31 @@ class STM32FSerial(object):
         return data
 
     @close_on_fail
+    def write_verify(self, addr, data, smallblocks=False):
+        lng = len(data)
+        data = list(data)
+        if smallblocks:
+            block_size=64
+        else:
+            block_size=256
+        offs = 0
+        while lng > block_size:
+            self.cmdWriteMemory(addr, data[offs:offs+block_size])
+            rdata = self.cmdReadMemory(addr, block_size)
+            for i in range(len(rdata)):
+                if rdata[i] != data[offs+i]:
+                    raise IOError("Verify failed at {:04X}, {} != {}".format(offs+i, rdata[i], data[offs+i]))
+            offs += block_size
+            addr += block_size
+            lng -= block_size
+        if lng:
+            self.cmdWriteMemory(addr, data[offs:])
+            rdata = self.cmdReadMemory(addr, lng)
+            for i in range(len(rdata)):
+                if rdata[i] != data[offs+i]:
+                    raise IOError("Verify failed at {:04X}, {} != {}".format(offs+i, rdata[i], data[offs+i]))
+
+    @close_on_fail
     def writeMemory(self, addr, data, smallblocks=False):
         """Write to the memory on the chip. If smallblocks is true, it uses a smaller
            block size, which can be more reliable as sometimes the full block size
@@ -632,7 +683,7 @@ class STM32FSerial(object):
         if smallblocks:
             block_size = 64
         else:
-            block_size = 256
+            block_size = 128
 
         offs = 0
         while lng > block_size:

@@ -16,7 +16,7 @@ void AES128_ECB_decrypt(uint8_t* input, uint8_t* key, uint8_t *output);
 
 void AES128_ECB_indp_setkey(uint8_t* key);
 void AES128_ECB_indp_crypto(uint8_t* input);
-
+void AES128_ECB_indp_crypto_dec(uint8_t* input);
 
 
 #endif //_AES_H_

@@ -24,7 +24,6 @@
 void aes_indep_init(void)
 {
     HW_AES128_Init();
-	
 }
 
 void aes_indep_key(uint8_t * key)
@@ -32,17 +31,45 @@ void aes_indep_key(uint8_t * key)
     HW_AES128_LoadKey(key);
 }
 
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    HW_AES128_Enc_pretrigger(pt);
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    HW_AES128_Enc_posttrigger(pt);
+}
+
 void aes_indep_enc(uint8_t * pt)
 {
     HW_AES128_Enc(pt);
 }
 
-void aes_indep_mask(uint8_t * m)
+#ifdef AES_DECRYPT
+void aes_indep_dec_pretrigger(uint8_t * ct)
+{
+    HW_AES128_Dec_pretrigger(ct);
+}
+
+void aes_indep_dec_posttrigger(uint8_t * ct)
+{
+    HW_AES128_Dec_posttrigger(ct);
+}
+
+void aes_indep_dec(uint8_t * ct)
+{
+    HW_AES128_Dec(ct);
+}
+#endif
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
 #elif defined(AVRCRYPTOLIB)
 #include "aes128_enc.h"
+#include "aes128_dec.h"
 #include "aes_keyschedule.h"
 
 aes128_ctx_t ctx;
@@ -62,7 +89,34 @@ void aes_indep_enc(uint8_t * pt)
 	aes128_enc(pt, &ctx); /* encrypting the data block */
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+#ifdef AES_DECRYPT
+void aes_indep_dec(uint8_t * ct)
+{
+	aes128_dec(ct, &ctx); /* decrypting the data block */
+}
+
+void aes_indep_dec_pretrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * ct)
+{
+    ;
+}
+#endif
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -90,7 +144,17 @@ void aes_indep_enc(uint8_t * pt)
 	}
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -124,7 +188,17 @@ void aes_indep_enc(uint8_t * pt)
 	aes256_enc(j, pt, &ctx, 1);
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
@@ -149,35 +223,166 @@ void aes_indep_enc(uint8_t * pt)
 	AES128_ECB_indp_crypto(pt);
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+#ifdef AES_DECRYPT
+void aes_indep_dec(uint8_t * ct)
+{
+	AES128_ECB_indp_crypto_dec(ct);
+}
+
+void aes_indep_dec_pretrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * ct)
+{
+    ;
+}
+#endif
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
 #elif defined(MBEDTLS)
 #include "mbedtls/aes.h"
 
-mbedtls_aes_context ctx;
+static mbedtls_aes_context enc_ctx;
+#ifdef AES_DECRYPT
+static mbedtls_aes_context dec_ctx;
+#endif
 
 void aes_indep_init(void)
 {
-	mbedtls_aes_init(&ctx);
+	mbedtls_aes_init(&enc_ctx);
+    #ifdef AES_DECRYPT
+    mbedtls_aes_init(&dec_ctx);
+    #endif
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
 }
 
 void aes_indep_key(uint8_t * key)
 {
-	mbedtls_aes_setkey_enc(&ctx, key, 128);
+	mbedtls_aes_setkey_enc(&enc_ctx, key, 128);
+    #ifdef AES_DECRYPT
+	mbedtls_aes_setkey_dec(&dec_ctx, key, 128);
+    #endif
 }
 
 void aes_indep_enc(uint8_t * pt)
 {
-	mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, pt, pt); /* encrypting the data block */
+	mbedtls_aes_crypt_ecb(&enc_ctx, MBEDTLS_AES_ENCRYPT, pt, pt); /* encrypting the data block */
 }
 
-void aes_indep_mask(uint8_t * m)
+#ifdef AES_DECRYPT
+void aes_indep_dec_pretrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec(uint8_t * ct)
+{
+	mbedtls_aes_crypt_ecb(&dec_ctx, MBEDTLS_AES_DECRYPT, ct, ct); /* decrypting the data block */
+}
+#endif
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
+{
+}
+
+#elif defined(WOLFSSL)
+
+// FIXME: add target-dependent default headers
+#include <user_settings_arm.h>
+#include <wolfssl/wolfcrypt/aes.h>
+
+static Aes enc_ctx;
+#ifdef AES_DECRYPT
+static Aes dec_ctx;
+#endif
+
+void aes_indep_init(void)
+{
+	wc_AesInit(&enc_ctx, NULL, INVALID_DEVID);
+    #ifdef AES_DECRYPT
+    wc_AesInit(&dec_ctx, NULL, INVALID_DEVID);
+    #endif
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    ;
+}
+
+void aes_indep_key(uint8_t * key)
+{
+    uint8_t t[16] = {0};
+	wc_AesSetKeyDirect(&enc_ctx, key, 16, t, AES_ENCRYPTION);
+    #ifdef AES_DECRYPT
+	wc_AesSetKeyDirect(&dec_ctx, key, 16, t, AES_DECRYPTION);
+    #endif
+}
+
+void aes_indep_enc(uint8_t * pt)
+{
+    uint8_t t[16];
+    wc_AesEncryptDirect(&enc_ctx, t, pt); /* encrypting the data block */
+    memcpy(pt, t, 16);
+}
+
+#ifdef AES_DECRYPT
+void aes_indep_dec_pretrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec_posttrigger(uint8_t * ct)
+{
+    ;
+}
+
+void aes_indep_dec(uint8_t * ct)
+{
+	wc_AesDecryptDirect(&dec_ctx, ct, ct); /* decrypting the data block */
+}
+#endif
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
 }
 
 #elif defined(MASKEDAES)
+
+#if defined(ANSSI_AVR)
 
 #include "aesTables.h"
 #include "maskedAES128enc.h"
@@ -195,27 +400,201 @@ void aes_indep_key(uint8_t * key)
 
 void aes_indep_enc(uint8_t * pt)
 {
+  asm_maskedAES128enc();
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
   int i;
   for (i = 0; i < AESInputSize; i++)
     input[i] = pt[i];
-  asm_maskedAES128enc();
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+    int i;
   for (i = 0; i < AESOutputSize; i++)
     pt[i] = input[i];
 }
 
-void aes_indep_mask(uint8_t * m)
+void aes_indep_mask(uint8_t * m, uint8_t len)
 {
   int i;
   for (i = 0; i < AESMaskSize; i++)
     mask[i] = m[i];
 }
 
+#elif defined(ANSSI_CM4)
 
+#include "platform.h"
+#include "string.h"
+#include "aes.h"
+
+#ifndef NULL
+#define NULL 0
+#endif
+
+#define AESKeySize 16
+#define AESMaskSize 19
+#define AESBlockSize 16
+
+STRUCT_AES aes_ctx;
+uint8_t key_mask[AESMaskSize];
+uint8_t aes_mask[AESMaskSize];
+uint8_t temp_key[AESKeySize];
+uint8_t mask_modes;
+
+void aes_indep_init(void)
+{
+  local_memset(&aes_ctx, 0, sizeof(aes_ctx));
+  mask_modes = 0;
+}
+
+void aes_indep_key(uint8_t* key)
+{
+#ifdef TRIG_BEFORE_KS
+  int i;
+  for (i = 0; i < AESKeySize; i++)
+    temp_key[i] = key[i];
+#else
+  aes(MODE_KEYINIT | mask_modes, &aes_ctx, key,
+      NULL /* plaintext */, NULL /* encrypted text */,
+      aes_mask, key_mask);
+#endif
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+}
+
+void aes_indep_enc(uint8_t* pt)
+{
+#ifdef TRIG_BEFORE_KS
+  aes(MODE_KEYINIT | MODE_AESINIT_ENC | MODE_ENC | mask_modes,
+      &aes_ctx, temp_key,
+      pt /* plaintext */, pt /* encrypted text */,
+      aes_mask, key_mask);
+#else
+  aes(MODE_AESINIT_ENC | MODE_ENC | mask_modes, &aes_ctx, NULL /* key */,
+      pt /* plaintext */, pt /* encryted text */,
+      aes_mask, key_mask);
+#endif
+}
+
+void aes_indep_mask(uint8_t* m, uint8_t len)
+{
+  int i;
+  if (len >= AESMaskSize) {
+    for (i = 0; i < AESMaskSize; i++)
+      key_mask[i] = m[i];
+    mask_modes |= MODE_RANDOM_KEY_EXT;
+  } else {
+    mask_modes &= ~MODE_RANDOM_KEY_EXT;
+  }
+
+  if (len == (2 * AESMaskSize)) {
+    for (i = 0; i < AESMaskSize; i++)
+      aes_mask[i] = m[i + AESMaskSize];
+    mask_modes |= MODE_RANDOM_AES_EXT;
+  } else {
+    mask_modes &= ~MODE_RANDOM_AES_EXT;
+  }
+}
+
+#elif defined(RIOUBSAES)
+
+#include "secure_aes_pbs.h"
+
+uint8_t encKey[16];
+
+bitslice_t get_random_bitslice(void)
+{
+  return get_rand();
+}
+
+void aes_indep_init(void)
+{
+}
+
+void aes_indep_key(uint8_t * key)
+{
+  for (uint8_t i = 0; i < 16; i++) {
+    encKey[i] = key[i];
+  }
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+}
+
+void aes_indep_enc(uint8_t * pt)
+{
+  sec_aes128_enc_packed_bitslice_wrapper(pt, pt, encKey);
+}
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
+{
+}
+
+#elif defined(KNARFRANKBSAES)
+
+#include "masked_combined.h"
+
+uint8_t encKey[16];
+
+int rand(void)
+{
+  return get_rand();
+}
+
+void aes_indep_init(void)
+{
+}
+
+void aes_indep_key(uint8_t * key)
+{
+  for (uint8_t i = 0; i < 16; i++) {
+    encKey[i] = key[i];
+  }
+}
+
+void aes_indep_enc_pretrigger(uint8_t * pt)
+{
+}
+
+void aes_indep_enc_posttrigger(uint8_t * pt)
+{
+}
+
+void aes_indep_enc(uint8_t * pt)
+{
+  uint8_t result[16];
+  Encrypt(result, pt, encKey);
+  for (uint8_t i = 0; i < 16; i++) {
+    pt[i] = result[i];
+  }
+}
+
+void aes_indep_mask(uint8_t * m, uint8_t len)
+{
+}
+
+#else
+
+#error "Unsupported MASKEDAES implementation"
+
+#endif // MASKEDAES
 
 #else
 
 #error "No Crypto Lib Defined?"
 
 #endif
-
-

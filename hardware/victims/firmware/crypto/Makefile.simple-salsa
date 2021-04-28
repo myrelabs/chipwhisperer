@@ -1,0 +1,6 @@
+########
+CRYPTO_LIB = simple-Salsa20-ChaCha
+SRC += salsa20.c chacha-independant.c
+CDEFS += -DSIMPLESALSA
+VPATH += :$(FIRMWAREPATH)/crypto/$(CRYPTO_LIB)
+EXTRAINCDIRS += $(FIRMWAREPATH)/crypto/$(CRYPTO_LIB)

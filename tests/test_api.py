@@ -77,7 +77,6 @@ class TestTraces(unittest.TestCase):
         # allow slicing
         self.assertEqual(self.fake_trace_2[1], textins[-2:][-1])
 
-
 class TestProject(unittest.TestCase):
 
     def setUp(self):
@@ -85,6 +84,30 @@ class TestProject(unittest.TestCase):
 
     def tearDown(self):
         self.project.remove(i_am_sure=True)
+
+
+    def test_short_segments(self):
+        self.project = cw.create_project(self.project_name)
+        self.project.seg_len = 2
+        self.project.seg_ind_max = self.project.traces.seg_len - 1
+        traces = create_random_traces(100, 1000)
+        self.project.traces.extend(traces)
+
+        index = random.randrange(0, len(traces))
+        index_wave = random.randrange(0, len(traces[0]))
+        self.assertEqual(traces[index].wave[index_wave], self.project.traces[index].wave[index_wave])
+
+
+        # Note: I think we can just call assertEqual on the arrays instead of doing it per each value
+        for i in range(16):
+            # check the plaintext matches
+            self.assertEqual(traces[index].textin[i], self.project.traces[index].textin[i])
+
+            # check the textout matches
+            self.assertEqual(traces[index].textout[i], self.project.traces[index].textout[i])
+
+            # check the key matches
+            self.assertEqual(traces[index].key[i], self.project.traces[index].key[i])
 
     def test_create_and_save_project(self):
         self.project = cw.create_project(self.project_name)
@@ -125,6 +148,8 @@ class TestProject(unittest.TestCase):
         # check that the power trace matches
         self.assertEqual(traces[index].wave[index_wave], self.project.traces[index].wave[index_wave])
 
+
+        # Note: I think we can just call assertEqual on the arrays instead of doing it per each value
         for i in range(16):
             # check the plaintext matches
             self.assertEqual(traces[index].textin[i], self.project.traces[index].textin[i])
@@ -134,6 +159,36 @@ class TestProject(unittest.TestCase):
 
             # check the key matches
             self.assertEqual(traces[index].key[i], self.project.traces[index].key[i])
+
+    def test_individual_iterables(self):
+        self.project = cw.create_project(self.project_name)
+
+        # make sure textin is still textin and not key, etc.
+        traces = create_random_traces(50, 1)
+        self.project.traces.extend(traces)
+
+        index = 0
+        for wave, textin, textout, key in zip(self.project.waves, self.project.textins, self.project.textouts, self.project.keys):
+            self.assertEqual(traces[index].textin, textin)
+            self.assertEqual(traces[index].textout, textout)
+            self.assertEqual(traces[index].key, key)
+            self.assertEqual(traces[index].wave, wave)
+            index += 1
+
+        self.assertEqual(index, len(self.project.textins))
+    
+    def test_numpy_conversion(self):
+        self.project = cw.create_project(self.project_name)
+
+        traces = create_random_traces(100, 1000)
+        self.project.traces.extend(traces)
+
+        np_waves = np.array(self.project.waves)
+        self.assertEqual(np.shape(np_waves), (len(traces), len(traces[0].wave)))
+        self.assertEqual(np_waves.dtype, 'float64')
+        for i in range(len(np_waves)):
+            self.assertEqual((np_waves[i,:] == self.project.waves[i]).all(), True)
+
 
     def test_project_openable(self):
         self.project = cw.create_project(self.project_name)
@@ -258,6 +313,58 @@ class TestUtils(unittest.TestCase):
 
         arr = bytearray([14, 10, 2])
         self.assertEqual(str(arr), "CWbytearray(b'0e 0a 02')")
+
+class TestSegment(unittest.TestCase):
+    def setUp(self):
+        self.project = cw.create_project('test_seg', overwrite=True)
+        for i in range(0, 10000):
+            arr = bytearray(b'CWUNIQUESTRING1')
+            tr = cw.Trace(np.array([0]), arr, arr, arr)
+            self.project.traces.append(tr)
+
+        arr = bytearray(b'CWUNIQUESTRING2')
+        tr = cw.Trace(np.array([0]), arr, arr, arr)
+        self.project.traces.append(tr)
+        self.project.save()
+        self.project.close()
+
+    def tearDown(self):
+        self.project.close(save=False)
+        self.project.remove(i_am_sure=True)
+
+    def test_trace_beyond_segment(self):
+        self.project = cw.open_project('test_seg')
+        arr = bytearray(b'CWUNIQUESTRING2')
+        for i in range(0, len(arr)):
+            self.assertEqual(self.project.textins[10000][i], arr[i])
+
+class TestCPA(unittest.TestCase):
+    def test_CPA(self):
+        project = cw.open_project('projects/Tutorial_B5')
+        leak_model = cwa.leakage_models.sbox_output
+        attack = cwa.cpa(project, leak_model)
+        results = attack.run()
+        keys = results.find_key()
+        for i in range(len(project.keys[0])):
+            self.assertEqual(project.keys[0][i], keys[i])
+
+        project.close(save=False)
+
+    def test_jitter(self):
+        project = cw.open_project('projects/jittertime')
+        resync_traces = cwa.preprocessing.ResyncSAD(project)
+        resync_traces.ref_trace = 0
+        resync_traces.target_window = (700, 1500)
+        resync_traces.max_shift = 700
+        new_proj = resync_traces.preprocess()
+        leak_model = cwa.leakage_models.sbox_output
+        attack = cwa.cpa(new_proj, leak_model)
+        results = attack.run()
+        keys = results.find_key()
+        for i in range(len(project.keys[0])):
+            self.assertEqual(project.keys[0][i], keys[i])
+        project.close(save=False)
+
 
 
 if __name__ == '__main__':

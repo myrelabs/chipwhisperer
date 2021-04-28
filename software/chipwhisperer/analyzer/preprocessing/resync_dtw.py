@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2013-2014, NewAE Technology Inc
+# Copyright (c) 2013-2020, NewAE Technology Inc
 # All rights reserved.
 #
 # Author: Colin O'Flynn
@@ -26,8 +26,12 @@
 #=================================================
 
 from ._base import PreprocessingBase
-from chipwhisperer.analyzer.utils.fasterdtw import fastdtw
-from chipwhisperer.common.utils.parameter import setupSetParam
+from chipwhisperer.common.utils.util import camel_case_deprecated
+try:
+    from fastdtw import fastdtw
+except ModuleNotFoundError:
+    from chipwhisperer.analyzer.utils.fasterdtw import fastdtw
+import numpy as np
 
 class ResyncDTW(PreprocessingBase):
     """Align traces using the Dynamic Time Warp algorithm. Doesn't play well
@@ -42,12 +46,7 @@ class ResyncDTW(PreprocessingBase):
         self._rtrace = 0
         self._radius = 3
 
-        self.params.addChildren([
-            {'name':'Ref Trace', 'key':'reftrace', 'type':'int', 'get':self._getRefTrace, 'set':self._setRefTrace},
-            {'name':'Radius', 'key':'radius', 'type':'int', 'get':self._getRadius, 'set':self._setRadius}
-        ])
 
-    @setupSetParam("Ref Trace")
     def _setRefTrace(self, num):
         self._rtrace = num
 
@@ -67,7 +66,6 @@ class ResyncDTW(PreprocessingBase):
             raise TypeError("Expected int; got %s" % type(num), num)
         self._setRefTrace(num)
 
-    @setupSetParam("Radius")
     def _setRadius(self, radius):
         self._radius = radius
 
@@ -90,23 +88,29 @@ class ResyncDTW(PreprocessingBase):
             raise TypeError("Expected int; got %s" % type(radius), radius)
         self._setRadius(radius)
    
-    def getTrace(self, n):
+    def get_trace(self, n):
         if not self.enabled:
-            return self._traceSource.getTrace(n)
+            return self._traceSource.get_trace(n)
 
-        trace = self._traceSource.getTrace(n)
-        ref_trace = self._traceSource.getTrace(self._rtrace)
+        trace = self._traceSource.get_trace(n)
+        ref_trace = self._traceSource.get_trace(self._rtrace)
         if trace is None or ref_trace is None:
             return None
 
-        aligned = self._alignTraces(ref_trace, trace)
+        aligned = self._align_traces(ref_trace, trace)
         return aligned
+
+
+    getTrace = camel_case_deprecated(get_trace)
         
-    def _alignTraces(self, ref, trace):
-        N = self._traceSource.numPoints()
+    def _align_traces(self, ref, trace):
+        N = self._traceSource.num_points()
         r = self._radius
         #try:
-        dist, path = fastdtw(ref, trace, radius=r, dist=None)
+        # cython fastdtw can't take numpy.memmap inputs, so we convert them to arrays:
+        aref = np.array(list(ref))
+        atrace = np.array(list(trace))
+        dist, path = fastdtw(aref, atrace, radius=r, dist=None)
         #except:
         #    return None
         px = [x for x, y in path]

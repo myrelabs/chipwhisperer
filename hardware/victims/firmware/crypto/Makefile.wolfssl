@@ -1,0 +1,25 @@
+CRYPTO_LIB = wolfssl/
+
+VPATH += :$(FIRMWAREPATH)/crypto/$(CRYPTO_LIB)/src :$(FIRMWAREPATH)/crypto/$(CRYPTO_LIB)/wolfcrypt/src
+EXTRAINCDIRS += $(FIRMWAREPATH)/crypto/$(CRYPTO_LIB)
+
+CDEFS += -DWOLFSSL
+
+ifeq ($(CRYPTO_OPTIONS),AES128C)
+ SRC += aes.c aes-independant.c
+ CDEFS += -DNO_WOLFSSL_DIR -DWOLFSSL_USER_IO -DNO_WRITEV -DWOLFSSL_AES_DIRECT
+  
+else ifeq ($(CRYPTO_OPTIONS),RSA)
+ SRC += rsa.c
+ CDEFS += -DNO_WOLFSSL_DIR -DWOLFSSL_USER_IO -DNO_WRITEV
+    
+else ifeq ($(CRYPTO_OPTIONS),SHA1)
+ SRC += sha.c
+ CDEFS += -DNO_WOLFSSL_DIR -DWOLFSSL_USER_IO -DNO_WRITEV
+    
+else
+
+ $(error: Unknown or blank CRYPTO_OPTIONS: $(CRYPTO_OPTIONS). CRYPTO_OPTIONS is required for this CRYPTO_TARGET)
+endif #CRYPTO_OPTIONS
+
+

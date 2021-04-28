@@ -32,13 +32,14 @@ import pickle
 import traceback
 import os
 
-from usb.backend import libusb0
+from usb.backend import libusb0, libusb1
 import usb.core
 import usb.util
 
 from chipwhisperer.hardware.firmware import cwlite as fw_cwlite
 from chipwhisperer.hardware.firmware import cw1200 as fw_cw1200
 from chipwhisperer.hardware.firmware import cw305  as fw_cw305
+from chipwhisperer.hardware.firmware import cwnano  as fw_nano
 
 
 
@@ -71,6 +72,7 @@ NEWAE_PIDS = {
     0xACE2: {'name': "ChipWhisperer-Lite",     'fwver': fw_cwlite.fwver},
     0xACE3: {'name': "ChipWhisperer-CW1200",   'fwver': fw_cw1200.fwver},
     0xC305: {'name': "CW305 Artix FPGA Board", 'fwver': fw_cw305.fwver},
+    0xACE0: {'name': "ChipWhisperer-Nano", 'fwver': fw_nano.fwver},
 }
 
 class NAEUSB_Serializer_base(object):
@@ -90,6 +92,7 @@ class NAEUSB_Serializer_base(object):
     GET_POSSIBLE_DEVICES = 0xF6
     WRITE_BULK = 0xF7
     READ_BULK = 0xF8
+    CMD_WRITE_MEM_SAM3U = 0xF9
 
 
     ACK = 0xA0
@@ -210,6 +213,19 @@ class NAEUSB_Serializer(NAEUSB_Serializer_base):
         cmdpacket = self.make_cmd(self.CMD_WRITE_MEM, payload)
         return self.process_rx(self.txrx(tx=cmdpacket))
 
+    def cmdWriteSam3U(self, addr, data):
+        """
+        Send command to write memory over the SAM3U. 
+        """
+
+        dlen = len(data)
+
+        payload = [addr]
+        payload.extend(data)
+        cmdpacket = self.make_cmd(self.CMD_WRITE_MEM_SAM3U, payload)
+        return self.process_rx(self.txrx(tx=cmdpacket))
+
+
     def writeBulk(self, data):
         """
         Low-level function.
@@ -241,6 +257,7 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
     CMD_READMEM_CTRL = 0x12
     CMD_WRITEMEM_CTRL = 0x13
     CMD_MEMSTREAM = 0x14
+    CMD_WRITEMEM_CTRL_SAM3U = 0x15
 
     def __init__(self):
         self._usbdev = None
@@ -289,6 +306,10 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
                 addr = payload[0]
                 data = payload[1:]
                 self.cmdWriteMem(addr, data)
+            elif cmd == self.CMD_WRITE_MEM_SAM3U:
+                addr = payload[0]
+                data = payload[1:]
+                self.cmdWriteSam3U(addr, data)
             elif cmd == self.GET_POSSIBLE_DEVICES:
                 response = self.get_possible_devices(payload)
             elif cmd == self.OPEN:
@@ -341,11 +362,6 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
             else:
                 #User did not help us out - throw it in their face
                 raise Warning("Found multiple potential USB devices. Please specify device to use. Possible S/Ns:\n" + snlist)
-        try:
-            dev.set_configuration(0)
-            dev.set_configuration()
-        except ValueError:
-            raise OSError("NAEUSB: Could not configure USB device")
 
         # Get serial number
         try:
@@ -382,25 +398,33 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
             logging.info('USB Failure calling dispose_resources: %s' % str(e))
 
 
-    def get_possible_devices(self, idProduct=None, dictonly=True):
+    def get_possible_devices(self, idProduct=None, dictonly=True, backend="libusb1"):
         """
         Get a list of matching devices being based a list of PIDs. Returns list of usbdev that match (or empty if none)
         """
         if idProduct is None:
             idProduct = [None]
 
-        my_kwargs={}
+        my_kwargs = {'find_all': True, 'idVendor': 0x2B3E}
         if os.name == "nt":
             #on windows, need to manually load libusb because of 64bit python loading the wrong one
-            libusb_backend = libusb0.get_backend(find_library=lambda x: r"c:\Windows\System32\libusb0.dll")
-            my_kwargs = {'backend': libusb_backend}
+            libusb_backend = None
+            if backend == "libusb1":
+                import pathlib
+                libusb_dir = pathlib.Path(__file__).parent.absolute()
+                libusb_path = pathlib.Path(libusb_dir, "libusb-1.0.dll")
+                libusb_backend = libusb1.get_backend(find_library=lambda x: str(libusb_path))
+            if not libusb_backend:
+                libusb_backend = libusb0.get_backend(find_library=lambda x: r"c:\Windows\System32\libusb0.dll")
+                logging.info("Using libusb0 backend")
+            my_kwargs['backend'] = libusb_backend
         devlist = []
         try:
             for id in idProduct:
                 if id:
-                    dev = list(usb.core.find(find_all=True, idVendor=0x2B3E, idProduct=id, **my_kwargs))
+                    dev = list(usb.core.find(idProduct=id, **my_kwargs))
                 else:
-                    dev = list(usb.core.find(find_all=True, idVendor=0x2B3E, **my_kwargs))
+                    dev = list(usb.core.find(**my_kwargs))
                 if len(dev) > 0:
                     if len(dev) == 1:
                         devlist.extend(dev)
@@ -423,14 +447,23 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
             if dictonly:
                 devlist = [{'sn': d.serial_number, 'product': d.product, 'pid': d.idProduct, 'vid': d.idVendor} for d in devlist]
 
+            try:
+                if len(devlist) > 0:
+                    if dictonly:
+                        devlist[0]['sn']
+                    else:
+                        devlist[0].serial_number
+            except ValueError as e:
+                if backend == "libusb1":
+                    return self.get_possible_devices(idProduct, dictonly, "libusb0")
+                raise
             return devlist
         except ValueError as e:
             if "langid" not in str(e):
                 raise
-            raise OSError("'This device has no langid' ValueError caught. This is usually caused by us trying to read the serial number of the chipwhisperer, but it failing. The device is here and we can see it, but we can't access it. This has a number of root causes, including:\n" +
-                        "-Not having permission to access the ChipWhisperer (this still crops up if you have permission for one ChipWhisperer, but another ChipWhisperer is connected that you don't have access to)\n" +
-                        "-Not having the correct libusb backend loaded (common on Windows with 64bit Python). We try to handle this by loading the correct backend on Windows"
-                        )
+            if backend == "libusb1":
+                return self.get_possible_devices(idProduct, dictonly, "libusb0")
+            raise OSError("Unable to communicate with found ChipWhisperer. Check that another process isn't connected to it and that you have permission to communicate with it.")
 
     def sendCtrl(self, cmd, value=0, data=[]):
         """
@@ -462,7 +495,15 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
         # ADDR/LEN written LSB first
         pload = packuint32(dlen)
         pload.extend(packuint32(addr))
-        self.sendCtrl(cmd, data=pload)
+        try:
+            self.sendCtrl(cmd, data=pload)
+        except usb.USBError as e:
+            if "Pipe error" in str(e):
+                logging.warning("Attempting pipe error fix - typically safe to ignore")
+                self.sendCtrl(0x22, 0x11)
+                self.sendCtrl(cmd, data=pload)
+            else:
+                raise
 
         # Get data
         if cmd == self.CMD_READMEM_BULK:
@@ -502,6 +543,28 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
 
         return data
 
+    def cmdWriteSam3U(self, addr, data):
+        """
+        Send command to write memory over memory of SAMU3. 
+        """
+
+        dlen = len(data)
+
+        if dlen < 48:
+            cmd = self.CMD_WRITEMEM_CTRL_SAM3U
+        else:
+            cmd = self.ERROR
+
+        # ADDR/LEN written LSB first
+        pload = packuint32(dlen)
+        pload.extend(packuint32(addr))
+
+        if cmd == self.CMD_WRITEMEM_CTRL_SAM3U:
+            pload.extend(data)
+
+        self.sendCtrl(cmd, data=pload)
+        
+        return data
 
     def cmdWriteBulk(self, data):
         """
@@ -511,7 +574,6 @@ class NAEUSB_Backend(NAEUSB_Serializer_base):
         """
 
         self.usbdev().write(self.wep, data, timeout=self._timeout)
-
 
     def flushInput(self):
         """Dump all the crap left over"""
@@ -531,12 +593,14 @@ class NAEUSB(object):
     """
 
     CMD_FW_VERSION = 0x17
+    CMD_CDC_SETTINGS_EN = 0x31
 
     CMD_READMEM_BULK = 0x10
     CMD_WRITEMEM_BULK = 0x11
     CMD_READMEM_CTRL = 0x12
     CMD_WRITEMEM_CTRL = 0x13
     CMD_MEMSTREAM = 0x14
+    CMD_WRITEMEM_CTRL_SAM3U = 0x15
 
     stream = False
 
@@ -549,6 +613,29 @@ class NAEUSB(object):
 
     def get_possible_devices(self, idProduct):
         return self.usbseralizer.get_possible_devices(idProduct)
+
+    def get_cdc_settings(self):
+        return self.usbtx.readCtrl(self.CMD_CDC_SETTINGS_EN, dlen=2)
+
+    def set_cdc_settings(self, port=[1, 1]):
+        if isinstance(port, int):
+            port = [port, port]
+        self.usbtx.sendCtrl(self.CMD_CDC_SETTINGS_EN, (port[0]) | (port[1] << 1))
+
+
+    def get_serial_ports(self):
+        """May have multiple com ports associated with one device, so returns a list of port + interface
+        """
+        if not self.usbtx._usbdev:
+            raise OSError("Connect to device before calling this")
+        import serial.tools.list_ports
+        if serial.__version__ < '3.5':
+            raise OSError("Pyserial >= 3.5 (found {}) required for this method".format(serial.__version__))
+        devices = []
+        for port in serial.tools.list_ports.comports():
+            if port.serial_number == self.usbtx._usbdev.serial_number.upper():
+                devices.append({"port": port.device, "interface": port.location.split('.')[-1]})
+        return devices
 
     def con(self, idProduct=[0xACE2], connect_to_first=False, serial_number=None):
         """
@@ -603,7 +690,8 @@ class NAEUSB(object):
         latest = fwver[0] > fw_latest[0] or (fwver[0] == fw_latest[0] and fwver[1] >= fw_latest[1])
         if not latest:
             logging.warning('Your firmware is outdated - latest is %d.%d' % (fw_latest[0], fw_latest[1]) +
-                            '. Suggested to update firmware, as you may experience errors')
+                            '. Suggested to update firmware, as you may experience errors' +
+                            '\nSee https://chipwhisperer.readthedocs.io/en/latest/api.html#firmware-update')
         return foundId
 
     def usbdev(self):
@@ -613,6 +701,13 @@ class NAEUSB(object):
         """Close USB connection."""
         self.usbseralizer.close(self.snum)
         self.snum = None
+
+    def readCDCSettings(self):
+        try:
+            data = self.readCtrl(self.CMD_FW_VERSION, dlen=3)
+            return data
+        except usb.USBError:
+            return [0, 0]
 
     def readFwVersion(self):
         try:
@@ -650,6 +745,14 @@ class NAEUSB(object):
         """
 
         return self.usbseralizer.cmdWriteMem(addr, data)
+
+    def cmdWriteSam3U(self, addr, data):
+        """
+        Send command to write memory over external memory interface to FPGA. Automatically
+        decides to use control-transfer or bulk-endpoint transfer based on data length.
+        """
+
+        return self.usbseralizer.cmdWriteSam3U(addr, data)
 
     def writeBulkEP(self, data):
         """
@@ -748,6 +851,11 @@ class NAEUSB(object):
 
         if forreal:
             self.sendCtrl(0x22, 3)
+
+    def reset(self):
+        """ Reset the SAM3U. Requires firmware 0.30 or later
+        """
+        self.sendCtrl(0x22, 0x10)
 
     def read(self, dlen, timeout=2000):
         self.usbserializer.read(dlen, timeout)

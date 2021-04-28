@@ -82,7 +82,7 @@ class GlitchSettings(util.DisableNewAttr):
         dict['ext_offset'] = self.ext_offset
         dict['repeat'] = self.repeat
         dict['output'] = self.output
-
+        
         return dict
 
     def __repr__(self):
@@ -91,13 +91,16 @@ class GlitchSettings(util.DisableNewAttr):
     def __str__(self):
         return self.__repr__()
 
-    def manualTrigger(self):
+    def manual_trigger(self):
         """Manually trigger the glitch output.
 
         This trigger is most useful in Manual trigger mode, where this is the
         only way to cause a glitch.
         """
         self.cwg.glitchManual()
+        
+    def manualTrigger(self):
+        self.manual_trigger()
 
     def readStatus(self):
         """Read the status of the two glitch DCMs.
@@ -219,10 +222,13 @@ class GlitchSettings(util.DisableNewAttr):
         A pulse may begin anywhere from -49.8% to 49.8% away from a rising
         edge, allowing glitches to be swept over the entire clock cycle.
 
+        .. warning:: very large negative offset <-45 may result in double glitches
+
         :Getter: Return a float with the current glitch offset.
 
         :Setter: Set the glitch offset. The new value is rounded to the nearest
             possible offset.
+
 
         Raises:
            TypeError: offset not an integer
@@ -234,6 +240,9 @@ class GlitchSettings(util.DisableNewAttr):
     def offset(self, value):
         if value < self.cwg._min_offset or value > self.cwg._max_offset:
             raise UserWarning("Can't use glitch offset %s - rounding into [%s, %s]" % (value, self.cwg._min_offset, self.cwg._max_offset))
+
+        if value < -45:
+            logging.warning("Negative offsets <-45 may result in double glitches!")
         self.cwg.setGlitchOffset(value)
 
     @property
@@ -276,6 +285,8 @@ class GlitchSettings(util.DisableNewAttr):
          * "ext_single": Use the trigger module. One glitch per scope arm.
          * "ext_continuous": Use the trigger module. Many glitches per arm.
 
+         .. warning:: calling :code:`scope.arm()` in manual gitch mode will cause a glitch to trigger.
+
         :Getter: Return the current trigger source.
 
         :Setter: Change the trigger source.
@@ -302,6 +313,7 @@ class GlitchSettings(util.DisableNewAttr):
         If the glitch module is in "ext_single" trigger mode, it must be armed
         when the scope is armed. There are two timings for this event:
 
+         * "no_glitch": The glitch module is not armed. Gives a moderate speedup to capture.
          * "before_scope": The glitch module is armed first.
          * "after_scope": The scope is armed first. This is the default.
 
@@ -318,7 +330,9 @@ class GlitchSettings(util.DisableNewAttr):
            ValueError: if value not listed above
         """
         timing = self.cwg.getArmTiming()
-        if timing == 1:
+        if timing == 0:
+            return "no_glitch"
+        elif timing == 1:
             return "before_scope"
         elif timing == 2:
             return "after_scope"
@@ -327,12 +341,14 @@ class GlitchSettings(util.DisableNewAttr):
 
     @arm_timing.setter
     def arm_timing(self, value):
-        if value == "before_scope":
+        if value == "no_glitch":
+            int_val = 0
+        elif value == "before_scope":
             int_val = 1
         elif value == "after_scope":
             int_val = 2
         else:
-            raise ValueError("Can't set glitch arm timing to %s; valid values: ('before_scope', 'after_scope')" % value, value)
+            raise ValueError("Can't set glitch arm timing to %s; valid values: ('no_glitch', 'before_scope', 'after_scope')" % value, value)
 
         self.cwg.setArmTiming(int_val)
 
@@ -382,7 +398,7 @@ class GlitchSettings(util.DisableNewAttr):
         the glitch module to produce stronger glitches (especially during
         voltage glitching).
 
-        Repeat counter must be in the range [1, 255].
+        Repeat counter must be in the range [1, 8192].
 
         :Getter: Return the current repeat value (integer)
 
@@ -390,7 +406,7 @@ class GlitchSettings(util.DisableNewAttr):
 
         Raises:
            TypeError: if value not an integer
-           ValueError: if value outside [1, 255]
+           ValueError: if value outside [1, 8192]
         """
         return self.cwg.numGlitches()
 
@@ -401,8 +417,8 @@ class GlitchSettings(util.DisableNewAttr):
         except ValueError:
             raise TypeError("Can't convert %s to integer" % value, value)
 
-        if int_val < 1 or int_val > 255:
-            raise ValueError("New repeat value %d is outside range [1, 255]", int_val)
+        if int_val < 1 or int_val > 8192:
+            raise ValueError("New repeat value %d is outside range [1, 8192]", int_val)
 
         self.cwg.setNumGlitches(int_val)
 
@@ -749,13 +765,18 @@ class ChipWhispererGlitch(object):
 
         if num < 1:
             num = 1
-        resp[6] = num-1
+        num = num-1
+        resp[6] = num & 0xff #LSB        
+        resp[7] = (resp[7] & self.CLKSOURCE_MASK) | ((num >> 8) << 2) #5-bit MSB stored in upper bits
         self.oa.sendMessage(CODE_WRITE, glitchaddr, resp, Validate=False)
 
     def numGlitches(self):
         """Get number of glitches to occur after a trigger"""
         resp = self.oa.sendMessage(CODE_READ, glitchaddr, Validate=False, maxResp=8)
-        return resp[6]+1
+        num = resp[6]
+        num |= ((resp[7] & ~(self.CLKSOURCE_MASK)) >> 2) << 8
+        num += 1
+        return num
 
     def setGlitchTrigger(self, trigger):
         """Set glitch trigger type (manual, continous, adc-trigger)"""

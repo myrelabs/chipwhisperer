@@ -92,6 +92,10 @@ class GPIOSettings(util.DisableNewAttr):
         self.disable_newattr()
 
 
+    def read_tio_states(self):
+        bitmask = self.cwe.readTIOPins()
+        return tuple(((bitmask >> i) & 0x01) for i in range(4))
+
     def _dict_repr(self):
         dict = OrderedDict()
         dict['tio1'] = self.tio1
@@ -111,7 +115,31 @@ class GPIOSettings(util.DisableNewAttr):
 
         dict['target_pwr'] = self.target_pwr
 
+        dict['tio_states'] = self.tio_states
+
+        dict['cdc_settings'] = self.cdc_settings
+
         return dict
+
+    @property
+    def tio_states(self):
+        """
+        Reads the logic level of the TIO pins (1-4) and
+        returns them as a tuple of the logic levels. 
+
+        .. warning:: ChipWhisperer firmware before release 5.2.1 does not support
+            reading the TIO pins!
+
+        :getter: Read TIO states
+
+        Returns:
+            A tuple of 1's and 0's representing the logic levels
+            of each TIO pin
+
+        .. versionadded:: 5.3
+            Add documented interface for the old method of reading TIO pins
+        """
+        return self.read_tio_states()
 
     def __repr__(self):
         return util.dict_to_str(self._dict_repr())
@@ -162,6 +190,32 @@ class GPIOSettings(util.DisableNewAttr):
                 return _tio_api_alias[tio_setting]
         except KeyError:
             return "?"
+
+    @property
+    def cdc_settings(self):
+        """Check or set whether USART settings can be changed via the USB CDC connection
+
+        i.e. whether you can change USART settings (baud rate, 8n1) via a serial client like PuTTY
+
+        :getter: An array of length two for two possible CDC serial ports (though only one is used)
+
+        :setter: Can set either via an integer (which sets both ports) or an array of length 2 (which sets each port)
+
+        Returns None if using firmware before the CDC port was added
+        """
+        rawver = self.cwe.oa.serial.readFwVersion()
+        ver = '{}.{}'.format(rawver[0], rawver[1])
+        if ver < '0.30':
+            return None
+        return self.cwe.oa.serial.get_cdc_settings()
+
+    @cdc_settings.setter
+    def cdc_settings(self, port):
+        rawver = self.cwe.oa.serial.readFwVersion()
+        ver = '{}.{}'.format(rawver[0], rawver[1])
+        if ver < '0.30':
+            return None
+        return self.cwe.oa.serial.set_cdc_settings(port)
 
     @property
     def tio1(self):
@@ -471,6 +525,10 @@ class GPIOSettings(util.DisableNewAttr):
 
         This is the low-power version of glitch_hp - see that documentation
         for more details.
+
+        .. warning:: Use with caution - ensure that the glitch module is properly
+            configured before enabling this setting, as it is possible to
+            permanently damage hardware with this output.
         """
         return self.cwe.targetGlitchOut('B')
 
@@ -508,6 +566,7 @@ class TriggerSettings(util.DisableNewAttr):
             'tio2': self.cwe.PIN_RTIO2,
             'tio3': self.cwe.PIN_RTIO3,
             'tio4': self.cwe.PIN_RTIO4,
+            'nrst': self.cwe.PIN_TNRST,
         }
 
         self.last_module = "basic"
@@ -540,6 +599,7 @@ class TriggerSettings(util.DisableNewAttr):
 
         Pins:
          * tio1-4: Target I/O pins 1-4. Note that these pins can be in any mode.
+         * nRST: Target I/O pin nRST. Note that these pins can be in any mode.
          * sma: An auxiliary SMA input, if available (only on CW1200)
 
         Boolean operations:
@@ -553,6 +613,7 @@ class TriggerSettings(util.DisableNewAttr):
          * "tio1"
          * "tio3 OR tio4"
          * "tio1 NAND tio2 NAND sma"
+         * "nrst"
 
         Examples of unallowed trigger inputs:
          * "tio1 tio2"
@@ -595,6 +656,10 @@ class TriggerSettings(util.DisableNewAttr):
 
         if pins & self.cwe.PIN_FPA:
             tstring.append("sma")
+            tstring.append(modes)
+            
+        if pins & self.cwe.PIN_TNRST:
+            tstring.append("nrst")
             tstring.append(modes)
 
         #Remove last useless combination mode
@@ -684,6 +749,7 @@ class ProTrigger(TriggerSettings):
     def _dict_repr(self):
         dict = super()._dict_repr()
         dict['module'] = self.module
+        dict['aux_out'] = self.aux_out
         return dict
 
     @property
@@ -696,33 +762,16 @@ class ProTrigger(TriggerSettings):
 
         Available trigger modules:
          * 'basic': Trigger on a logic level or edge
-         * 'SAD':   Trigger from SAD module
-         * 'DECODEIO': Trigger from decode_IO module
-
+         * 'SAD':   Trigger from SAD module (CWPro only)
+         * 'DECODEIO': Trigger from decode_IO module (CWPro only)
 
         :Getter: Return the active trigger module
 
         :Setter: Sets the active trigger module
 
-        .. todo:: add support for CW1200 serial data trigger
-        .. todo:: Fix getter so that we don't have to store the module anymore
-
         Raises:
             ValueError: module isn't one of the available strings
         """
-        '''
-        resp = self.cwe.oa.sendMessage(CODE_READ, ADDR_TRIGMOD,
-                                       Validate=False, maxResp=1)
-        module = resp[0] & 0xF8
-        if module == self.cwe.MODULE_BASIC:
-            return "basic"
-        elif module == self.cwe.MODULE_SADPATTERN:
-            return "SAD"
-        elif module == self.cwe.MODULE_DECODEIO:
-            return "DECODEIO"
-        else:
-            return "Unknown"
-        '''
         return self.last_module
 
     @module.setter
@@ -743,6 +792,28 @@ class ProTrigger(TriggerSettings):
         resp = self.cwe.oa.sendMessage(CODE_WRITE, ADDR_TRIGMOD,
                                        resp)
         self.last_module = mode
+
+    @property
+    def aux_out(self):
+        """Controls AUX out on the CWPro
+
+        CWPro only
+
+        :Getter: Returns True if yes, False if no
+
+        :Setter: Set True to enable aux_out, False to disable
+        """
+        resp = self.cwe.oa.sendMessage(CODE_READ, ADDR_TRIGMOD, Validate=False, maxResp=1)
+        return bool(resp[0] & 0x08)
+
+    @aux_out.setter
+    def aux_out(self, enabled):
+        resp = self.cwe.oa.sendMessage(CODE_READ, ADDR_TRIGMOD, Validate=False, maxResp=1)
+        resp[0] &= 0xE7
+        if enabled:
+            resp[0] |= 0x08
+        self.cwe.oa.sendMessage(CODE_WRITE, ADDR_TRIGMOD, resp)
+
 
 
 
@@ -782,7 +853,7 @@ class ChipWhispererExtra(object):
 
 class CWExtraSettings(object):
     PIN_FPA = 0x01
-    PIN_FPB = 0x02
+    PIN_TNRST = 0x02
     PIN_RTIO1 = 0x04
     PIN_RTIO2 = 0x08
     PIN_RTIO3 = 0x10
