@@ -7,11 +7,9 @@
 
 
 void comb_init(void);
-uint8_t select_comb_from_TCopy(uint8_t *pt);
-uint8_t select_comb_from_TSource(uint8_t *pt);
+uint8_t select_comb(uint8_t *pt);
+uint8_t select_comb_no_output(uint8_t *pt);
 uint8_t call_recode(uint8_t *pt);
-uint8_t reseed(uint8_t *pt);
-
 
 int main(void)
 {
@@ -22,10 +20,9 @@ int main(void)
     comb_init();
 
     simpleserial_init();
-    simpleserial_addcmd('t', 1, select_comb_from_TCopy);
-    simpleserial_addcmd('a', 1, select_comb_from_TSource);
-    simpleserial_addcmd('s', 33, call_recode);
-    simpleserial_addcmd('r', 4, reseed);
+    simpleserial_addcmd('s', 2, select_comb);
+    simpleserial_addcmd('n', 2, select_comb_no_output);
+    simpleserial_addcmd('r', 33, call_recode);
     while(1)
         simpleserial_get();
 }

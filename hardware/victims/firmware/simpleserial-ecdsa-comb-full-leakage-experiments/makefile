@@ -34,7 +34,7 @@ TARGET = comb-leakage-experiments
 
 # List C source files here.
 # Header files (.h) are automatically pulled in.
-SRC += comb-leakage-experiments.c comb-leakage-experiments-arm-full.c    #mbedtls_ecp_comb_copy.c
+SRC += comb-leakage-experiments-full-duplicates.c comb-leakage-experiments-arm-full-duplicates.c    #mbedtls_ecp_comb_copy.c
 
 # -----------------------------------------------------------------------------
 

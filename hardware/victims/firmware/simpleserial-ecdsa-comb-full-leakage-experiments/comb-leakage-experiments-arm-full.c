@@ -4,7 +4,7 @@
 #include "simpleserial.h"
 #include "mbedtls/bignum.h"
 #include "mbedtls/ecp.h"
-#include "mbedtls/memory_buffer_alloc.h"
+//#include "mbedtls/memory_buffer_alloc.h"
 
 
 #define ECPARAMS   MBEDTLS_ECP_DP_BP256R1
@@ -41,12 +41,12 @@ static size_t d;
 
 
 #define SIZE_OF_T 16
-#define ADDITIONAL_SIZE 33
+#define ADDITIONAL_SIZE 31
 static mbedtls_ecp_point TSource[SIZE_OF_T];
 static mbedtls_ecp_point TBuffer[ADDITIONAL_SIZE+SIZE_OF_T];
 static mbedtls_ecp_point R;
 
-static unsigned char memory_buf[8000];
+//static unsigned char memory_buf[8000];
 
 
 
@@ -74,7 +74,7 @@ void comb_init(void)
 { 
     uint8_t i;
     
-    mbedtls_memory_buffer_alloc_init( memory_buf, sizeof(memory_buf) );
+    //mbedtls_memory_buffer_alloc_init( memory_buf, sizeof(memory_buf) );
     mbedtls_ecp_group_init(&grp);
     mbedtls_ecp_group_load(&grp, ECPARAMS);
  
@@ -95,11 +95,11 @@ void comb_init(void)
 static int copyTSource(mbedtls_ecp_point** PtrToTCopy, const uint8_t* permutationForCalloc)
 {
     int      ret = 0;
-    uint8_t  i,j;
+    uint32_t i,j;
     uint32_t startIndex;
     mbedtls_ecp_point* TCopy;
        
-    startIndex = myrand() % (ADDITIONAL_SIZE + 1);
+    startIndex = ((myrand()/4)*4) % (ADDITIONAL_SIZE + 1);
     TCopy = TBuffer + startIndex;
     
     for( i = 0; i < SIZE_OF_T; i++ )
