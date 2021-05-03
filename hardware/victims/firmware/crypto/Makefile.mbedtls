@@ -21,7 +21,7 @@ else ifeq ($(CRYPTO_OPTIONS),RSA)
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
     
 else ifeq ($(CRYPTO_OPTIONS),ECDSA)
- SRC += ecdsa.c ecp.c ecp_curves.c bignum.c error.c  platform_util.c  platform.c  md.c md2.c md4.c md5.c sha1.c sha256.c sha512.c ripemd160.c  hmac_drbg.c
+ SRC += ecdsa.c ecp.c ecp_curves.c bignum.c error.c  platform_util.c  platform.c  hmac_drbg.c md.c sha256.c sha512.c 
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
 
 #else ifeq ($(CRYPTO_OPTIONS),ECDSA)
