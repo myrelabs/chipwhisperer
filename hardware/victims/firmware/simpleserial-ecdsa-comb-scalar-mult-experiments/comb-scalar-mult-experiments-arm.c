@@ -8,17 +8,28 @@
 
 
 
+
 #define ECPARAMS   MBEDTLS_ECP_DP_BP256R1
 #define FIELD_LEN  32
 #define COMB_MAX_D      ( MBEDTLS_ECP_MAX_BITS + 1 ) / 2
 
 
+int ecp_precompute_comb( const mbedtls_ecp_group *grp,
+                                mbedtls_ecp_point T[], const mbedtls_ecp_point *P,
+                                unsigned char w, size_t d,
+                                mbedtls_ecp_restart_ctx *rs_ctx );
 
 void ecp_comb_recode_core( unsigned char x[], size_t d,
                                   unsigned char w, const mbedtls_mpi *m );
 
+void calculate_T_of_grp(mbedtls_ecp_group *grp, unsigned char w);
 
-static mbedtls_ecdsa_context ctx;
+
+
+#define NR_OF_COPIES 3
+
+
+static mbedtls_ecdsa_context ctx[NR_OF_COPIES];
 static unsigned char w;
 static size_t d;
 static mbedtls_ecp_point R;
@@ -68,20 +79,25 @@ uint8_t reseed(uint8_t *pt)
 
 
 void comb_scalar_mult_init(void) 
-{ 
-    //mbedtls_memory_buffer_alloc_init( memory_buf, sizeof(memory_buf) );
-    mbedtls_ecp_keypair_init( &ctx );  
-    mbedtls_ecp_group_load( &ctx.grp, ECPARAMS );
- 
+{
+    uint8_t i; 
+    
     w = 5; 
-    d = ( ctx.grp.nbits + w - 1 ) / w;
-    mbedtls_ecp_point_init( &R );    
 
+    //mbedtls_memory_buffer_alloc_init( memory_buf, sizeof(memory_buf) );
+    for (i=0 ; i < NR_OF_COPIES ; i++) {
+        mbedtls_ecp_keypair_init( &ctx[i] );  
+        mbedtls_ecp_group_load( &ctx[i].grp, ECPARAMS );
+        calculate_T_of_grp(&ctx[i].grp, w);
+    }
+
+    d = ( ctx[0].grp.nbits + w - 1 ) / w;
+    mbedtls_ecp_point_init( &R );    
     set_seed(0x29D14CA8);   //carefully chosen, trully random seed ;)
 }
 
 
-
+//pt[0] indicates the length of the scalar, pt+1 points to the scalar itself
 
 uint8_t call_recode(uint8_t *pt)
 {
@@ -103,9 +119,11 @@ cleanup:
 }
 
 
+//pt[0] indicates the index of the context, pt+1 is the pointer to the scalar
 
 uint8_t ecdsa_set_key(uint8_t *pt)
 {
+    uint8_t  i = pt[0] % NR_OF_COPIES;
     int      ret = 0;                     //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
     //const char *pers = "ecdsa";
     uint8_t  buf_for_compressed_point[1+FIELD_LEN];        
@@ -116,13 +134,13 @@ uint8_t ecdsa_set_key(uint8_t *pt)
     //mbedtls_entropy_init( &entropy );        //!!!!!!!!!!! STM32F3 entropy mbedtls HowTo
     //mbedtls_ctr_drbg_init( &ctr_drbg );
 
-    MBEDTLS_MPI_CHK( mbedtls_mpi_read_binary( &ctx.d, pt, FIELD_LEN ) );
-    MBEDTLS_MPI_CHK( mbedtls_ecp_check_privkey( &ctx.grp, &ctx.d) );
+    MBEDTLS_MPI_CHK( mbedtls_mpi_read_binary( &ctx[i].d, pt+1, FIELD_LEN ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_check_privkey( &ctx[i].grp, &ctx[i].d) );
     //MBEDTLS_MPI_CHK( mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen( pers ) ) );
-    MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx.grp, &ctx.Q, &ctx.d, &ctx.grp.G, myrand, NULL ) );   //mbedtls_ctr_drbg_random, &ctr_drbg ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_mul( &ctx[i].grp, &ctx[i].Q, &ctx[i].d, &ctx[i].grp.G, myrand, NULL ) );   //mbedtls_ctr_drbg_random, &ctr_drbg ) );
     
     memset(buf_for_compressed_point, 0, 1 + FIELD_LEN);
-    MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx.grp, &ctx.Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf_for_compressed_point, 1 + FIELD_LEN ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecp_point_write_binary( &ctx[i].grp, &ctx[i].Q, MBEDTLS_ECP_PF_COMPRESSED, &compressed_point_length, buf_for_compressed_point, 1 + FIELD_LEN ) );
     simpleserial_put('r', compressed_point_length, buf_for_compressed_point);
    
 cleanup:

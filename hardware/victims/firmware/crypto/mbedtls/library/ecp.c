@@ -1785,6 +1785,13 @@ cleanup:
  * - m is the MPI, expected to be odd and such that bitlength(m) <= w * d
  *   (the result will be incorrect if these assumptions are not satisfied)
  */
+ 
+ 
+void trigger_low(void);     //ToDo: to be removed
+void trigger_high(void);    //ToDo: to be removed
+ 
+ 
+ 
 void ecp_comb_recode_core( unsigned char x[], size_t d,
                                   unsigned char w, const mbedtls_mpi *m )
 {
@@ -1793,10 +1800,17 @@ void ecp_comb_recode_core( unsigned char x[], size_t d,
 
     memset( x, 0, d+1 );
 
+
+
+    trigger_high(); //ToDo: to be removed
+    
     /* First get the classical comb values (except for x_d = 0) */
     for( i = 0; i < d; i++ )
         for( j = 0; j < w; j++ )
             x[i] |= mbedtls_mpi_get_bit( m, i + d * j ) << j;
+            
+    trigger_low();  //ToDo: to be removed
+
 
     /* Now make sure x_1 .. x_d are odd */
     c = 0;
@@ -2016,6 +2030,24 @@ cleanup:
  *
  * Cost: d A + d D + 1 R
  */
+ 
+ 
+
+
+void calculate_T_of_grp(mbedtls_ecp_group *grp, unsigned char w)    //ToDo: to be removed
+{
+    unsigned char T_size;
+    size_t        d;
+ 
+    T_size = 1U << ( w - 1 );
+    grp->T = mbedtls_calloc( T_size, sizeof( mbedtls_ecp_point ) );               
+    grp->T_size = T_size;
+    d = ( grp->nbits + w - 1 ) / w;
+    ecp_precompute_comb( grp, grp->T, &(grp->G), w, d, NULL );
+}
+
+ 
+ 
 static int ecp_mul_comb_core( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R,
                               const mbedtls_ecp_point T[], unsigned char T_size,
                               const unsigned char x[], size_t d,
@@ -2060,15 +2092,23 @@ static int ecp_mul_comb_core( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R
             MBEDTLS_MPI_CHK( ecp_randomize_jac( grp, R, f_rng, p_rng ) );
     }
 
-    while( i != 0 )
+
+    trigger_high();   //ToDo: to be removed
+
+    while( i != d-1 ) //ToDo: while( i != 0 )
     {
         MBEDTLS_ECP_BUDGET( MBEDTLS_ECP_OPS_DBL + MBEDTLS_ECP_OPS_ADD );
         --i;
 
         MBEDTLS_MPI_CHK( ecp_double_jac( grp, R, R ) );
+        //trigger_high();   //ToDo: to be removed
         MBEDTLS_MPI_CHK( ecp_select_comb( grp, &Txi, T, T_size, x[i] ) );
+        //trigger_low();   //ToDo: to be removed
         MBEDTLS_MPI_CHK( ecp_add_mixed( grp, R, R, &Txi ) );
     }
+
+    trigger_low();   //ToDo: to be removed
+
 
 cleanup:
 

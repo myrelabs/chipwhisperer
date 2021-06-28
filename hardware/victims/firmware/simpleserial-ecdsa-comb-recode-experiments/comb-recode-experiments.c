@@ -6,10 +6,8 @@
 
 
 
-void comb_scalar_mult_init(void);
+void comb_recode_init(void);
 uint8_t call_recode(uint8_t *pt);
-uint8_t ecdsa_set_key(uint8_t *pt);
-uint8_t reseed(uint8_t *pt);
 
 
 int main(void)
@@ -18,12 +16,10 @@ int main(void)
     init_uart();
     trigger_setup();
 
-    comb_scalar_mult_init();
+    comb_recode_init();
 
     simpleserial_init();
-    simpleserial_addcmd('s', 33, call_recode);
-    simpleserial_addcmd('k', 33, ecdsa_set_key);    
-    simpleserial_addcmd('r', 4, reseed);
+    simpleserial_addcmd('s', 34, call_recode);
     while(1)
         simpleserial_get();
 }
