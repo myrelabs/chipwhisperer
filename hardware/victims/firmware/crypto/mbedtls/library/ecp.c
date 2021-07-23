@@ -1809,7 +1809,7 @@ void ecp_comb_recode_core( unsigned char x[], size_t d,
         for( j = 0; j < w; j++ )
             x[i] |= mbedtls_mpi_get_bit( m, i + d * j ) << j;
             
-    trigger_low();  //ToDo: to be removed
+    trigger_low();  //ToDo: to be removed - used to the simplified attack
 
 
     /* Now make sure x_1 .. x_d are odd */
@@ -1827,6 +1827,8 @@ void ecp_comb_recode_core( unsigned char x[], size_t d,
         x[i] = x[i] ^ ( x[i-1] * adjust );
         x[i-1] |= adjust << 7;
     }
+    
+    //trigger_low();  //ToDo: to be removed - used to the full attack on   ecp_comb_recode_core
 }
 
 /*
