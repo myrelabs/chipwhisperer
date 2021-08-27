@@ -1802,14 +1802,14 @@ void ecp_comb_recode_core( unsigned char x[], size_t d,
 
 
 
-    trigger_high(); //ToDo: to be removed
+    //trigger_high(); //ToDo: to be removed
     
     /* First get the classical comb values (except for x_d = 0) */
     for( i = 0; i < d; i++ )
         for( j = 0; j < w; j++ )
             x[i] |= mbedtls_mpi_get_bit( m, i + d * j ) << j;
             
-    trigger_low();  //ToDo: to be removed - used to the simplified attack
+    //trigger_low();  //ToDo: to be removed - used to the simplified attack
 
 
     /* Now make sure x_1 .. x_d are odd */
@@ -2095,9 +2095,9 @@ static int ecp_mul_comb_core( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R
     }
 
 
-    trigger_high();   //ToDo: to be removed
+    //trigger_high();   //ToDo: to be removed
 
-    while( i != d-1 ) //ToDo: while( i != 0 )
+    while( i != 0 )
     {
         MBEDTLS_ECP_BUDGET( MBEDTLS_ECP_OPS_DBL + MBEDTLS_ECP_OPS_ADD );
         --i;
@@ -2109,7 +2109,7 @@ static int ecp_mul_comb_core( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R
         MBEDTLS_MPI_CHK( ecp_add_mixed( grp, R, R, &Txi ) );
     }
 
-    trigger_low();   //ToDo: to be removed
+    //trigger_low();   //ToDo: to be removed
 
 
 cleanup:
@@ -2140,7 +2140,7 @@ cleanup:
  *
  * See ecp_comb_recode_core() for background.
  */
-static int ecp_comb_recode_scalar( const mbedtls_ecp_group *grp,
+int ecp_comb_recode_scalar( const mbedtls_ecp_group *grp,
                                    const mbedtls_mpi *m,
                                    unsigned char k[COMB_MAX_D + 1],
                                    size_t d,
@@ -2157,16 +2157,25 @@ static int ecp_comb_recode_scalar( const mbedtls_ecp_group *grp,
     if( mbedtls_mpi_get_bit( &grp->N, 0 ) != 1 )
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );
 
+
     /* do we need the parity trick? */
     *parity_trick = ( mbedtls_mpi_get_bit( m, 0 ) == 0 );
 
     /* execute parity fix in constant time */
     MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &M, m ) );
     MBEDTLS_MPI_CHK( mbedtls_mpi_sub_mpi( &mm, &grp->N, m ) );
+
+    
+    trigger_high(); //ToDo: to be removed
+        
     MBEDTLS_MPI_CHK( mbedtls_mpi_safe_cond_assign( &M, &mm, *parity_trick ) );
+
 
     /* actual scalar recoding */
     ecp_comb_recode_core( k, d, w, &M );
+        
+    trigger_low();  //ToDo: to be removed
+
 
 cleanup:
     mbedtls_mpi_free( &mm );
