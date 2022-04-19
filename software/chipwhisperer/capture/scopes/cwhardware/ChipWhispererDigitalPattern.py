@@ -1,3 +1,4 @@
+# pylint: skip-file
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
@@ -26,9 +27,9 @@
 #=================================================
 import logging
 
-from chipwhisperer.capture.utils.SerialProtocols import CWCalcClkDiv as CalcClkDiv
-from chipwhisperer.capture.utils.SerialProtocols import strToBits as strToBits
-from chipwhisperer.common.utils.parameter import Parameter, Parameterized, setupSetParam
+from ....capture.utils.SerialProtocols import CWCalcClkDiv as CalcClkDiv
+from ....capture.utils.SerialProtocols import strToBits as strToBits
+from ....common.utils.parameter import Parameter, Parameterized, setupSetParam
 
 CODE_READ       = 0x80
 CODE_WRITE      = 0xC0

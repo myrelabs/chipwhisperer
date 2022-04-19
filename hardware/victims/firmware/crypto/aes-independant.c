@@ -69,7 +69,9 @@ void aes_indep_mask(uint8_t * m, uint8_t len)
 
 #elif defined(AVRCRYPTOLIB)
 #include "aes128_enc.h"
+#ifdef AES_DECRYPT
 #include "aes128_dec.h"
+#endif
 #include "aes_keyschedule.h"
 
 aes128_ctx_t ctx;
@@ -257,17 +259,17 @@ void aes_indep_mask(uint8_t * m, uint8_t len)
 #elif defined(MBEDTLS)
 #include "mbedtls/aes.h"
 
-static mbedtls_aes_context enc_ctx;
+mbedtls_aes_context enc_ctx;
 #ifdef AES_DECRYPT
-static mbedtls_aes_context dec_ctx;
+mbedtls_aes_context dec_ctx;
 #endif
 
 void aes_indep_init(void)
 {
 	mbedtls_aes_init(&enc_ctx);
-    #ifdef AES_DECRYPT
-    mbedtls_aes_init(&dec_ctx);
-    #endif
+	#ifdef AES_DECRYPT
+	mbedtls_aes_init(&dec_ctx);
+	#endif
 }
 
 void aes_indep_enc_pretrigger(uint8_t * pt)
