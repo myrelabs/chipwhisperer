@@ -19,6 +19,7 @@
 //#include "aes-independant.h"
 #include "hal.h"
 #include "simpleserial.h"
+#include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -32,6 +33,12 @@
 
 /* stm32f2_hal.c */
 extern uint8_t hw_key[16];
+
+#define MAX_PLAINTEXT_QUEUE 16
+uint8_t plaintext_queue[MAX_PLAINTEXT_QUEUE * 16];
+uint8_t *plaintext_queue_next_put = plaintext_queue;
+uint8_t *plaintext_queue_next_pop = plaintext_queue;
+uint8_t * const plaintext_queue_end = plaintext_queue + (MAX_PLAINTEXT_QUEUE * 16);
 
 void set_key(uint8_t *keyaddr)
 {
@@ -174,6 +181,57 @@ void crypt_twice(uint8_t* buffer)
     CRYP->CR = CR_di;
 }
 
+void crypt_many(uint8_t *buffer, int count)
+{
+    uint8_t *inputaddr = buffer;
+    uint8_t *outputaddr = buffer;
+
+    CRYP->CR |= CRYP_CR_FFLUSH;
+
+    const uint32_t CR = CRYP->CR;
+    const uint32_t CR_en = CR | CRYP_CR_CRYPEN;
+    const uint32_t CR_di = CR & ~CRYP_CR_CRYPEN;
+    
+    for(int i=0; i<count; ++i)
+    {
+        /* Write the Input block in the IN FIFO */
+        CRYP->DR = *(uint32_t*)(inputaddr);
+        inputaddr+=4U;
+        CRYP->DR = *(uint32_t*)(inputaddr);
+        inputaddr+=4U;
+        CRYP->DR = *(uint32_t*)(inputaddr);
+        inputaddr+=4U;
+        CRYP->DR = *(uint32_t*)(inputaddr);
+        inputaddr+=4U;
+
+        /* TRIGGER HIGH */
+        GPIOA->BSRR = GPIO_PIN_12;
+
+        /* Enable CRYP */
+        CRYP->CR = CR_en;
+
+        while(HAL_IS_BIT_CLR(CRYP->SR, CRYP_FLAG_OFNE))
+        {    
+        }
+
+        /* TRIGGER LOW */
+        GPIOA->BSRR = (GPIO_PIN_12 << 16);
+
+        /* Read the Output block from the Output FIFO */
+        *(uint32_t*)(outputaddr) = CRYP->DOUT;
+        outputaddr+=4U;
+        *(uint32_t*)(outputaddr) = CRYP->DOUT;
+        outputaddr+=4U;
+        *(uint32_t*)(outputaddr) = CRYP->DOUT;
+        outputaddr+=4U;
+        *(uint32_t*)(outputaddr) = CRYP->DOUT;
+        outputaddr+=4U;
+
+        /* Disable CRYP */
+        CRYP->CR = CR_di;
+    }
+}
+
 uint8_t get_mask(uint8_t* m, uint8_t len)
 {
     //aes_indep_mask(m);
@@ -189,7 +247,7 @@ uint8_t get_key(uint8_t* k, uint8_t len)
 uint8_t get_pt(uint8_t* pt, uint8_t len)
 {
 	//trigger_high();
-	crypt_twice(pt); /* encrypting the data block */
+	crypt(pt); /* encrypting the data block */
 	//trigger_low();
 	simpleserial_put('r', 16, pt);
 	return 0x00;
@@ -199,6 +257,37 @@ uint8_t reset(uint8_t* x, uint8_t len)
 {
     // Reset key here if needed
 	return 0x00;
+}
+
+uint8_t push_pt(uint8_t* pt, uint8_t len)
+{
+    if(plaintext_queue_next_put == plaintext_queue_end)
+        return 0x01;
+    memcpy(plaintext_queue_next_put, pt, 16);
+    plaintext_queue_next_put += 16;
+    return 0x00;
+}
+
+uint8_t process(uint8_t *_0, uint8_t _1)
+{
+    crypt_many(plaintext_queue, (plaintext_queue_next_put - plaintext_queue) / 16);
+    return 0x00;
+}
+
+uint8_t pop_pt(uint8_t *_0, uint8_t _1)
+{
+    if(plaintext_queue_next_pop == plaintext_queue_next_put)
+        return 0x01;
+    simpleserial_put('r', 16, plaintext_queue_next_pop);
+    plaintext_queue_next_pop += 16;
+    return 0x00;
+}
+
+uint8_t flush_pt(uint8_t *_0, uint8_t _1)
+{
+    plaintext_queue_next_put = plaintext_queue;
+    plaintext_queue_next_pop = plaintext_queue;
+    return 0x00;
 }
 
 int main(void)
@@ -225,6 +314,10 @@ int main(void)
     simpleserial_addcmd('p', 16,  get_pt);
     simpleserial_addcmd('x',  0,   reset);
     simpleserial_addcmd('m', 18, get_mask);
+    simpleserial_addcmd('u', 16, push_pt);
+    simpleserial_addcmd('d',  0, process);
+    simpleserial_addcmd('o',  0,  pop_pt);
+    simpleserial_addcmd('f',  0,flush_pt);
     while(1)
         simpleserial_get();
 }
