@@ -21,4 +21,11 @@ def set_all_log_levels(level):
     for logger in chipwhisperer_loggers:
         logger.setLevel(level)
 
-logging.debug("Need to print this to have logging work right")
+# logging.debug("Need to print this to have logging work right")
+# set_all_log_levels(logging.WARNING)
+logging.debug("WTF logging")
+
+#initialize levels for loggers
+for logger in chipwhisperer_loggers:
+    if logger.level == logging.NOTSET:
+        logger.setLevel(logging.WARNING)

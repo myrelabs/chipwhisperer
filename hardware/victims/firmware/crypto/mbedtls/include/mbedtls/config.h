@@ -3282,7 +3282,9 @@
  *            on it, and considering stronger message digests instead.
  *
  */
+#ifndef MBEDTLS_SHA1_C
 #define MBEDTLS_SHA1_C
+#endif
 
 /**
  * \def MBEDTLS_SHA256_C
