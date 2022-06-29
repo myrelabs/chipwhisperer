@@ -15,7 +15,7 @@ static int num_commands = 0;
 //#define SS_VER_2_0 2
 
 
-#define CRC 0xA6
+//#define CRC 0xA6
 uint8_t ss_crc(uint8_t *buf, uint8_t len)
 {
 	unsigned int k = 0;
