@@ -48,6 +48,16 @@ else ifeq ($(CRYPTO_TARGET),TINYAES128C)
   include $(FIRMWAREPATH)/crypto/Makefile.tinyaes128c
 
 
+else ifeq ($(CRYPTO_TARGET),QDSAAVR)
+#
+# Crypto Target: QDSAAVR
+# Crypto Options:
+#    ECDH
+#    QDSA 
+# Notes:
+#
+  include $(FIRMWAREPATH)/crypto/Makefile.qdsa-avr
+
 else ifeq ($(CRYPTO_TARGET),MBEDTLS)
 #
 # Crypto Target: MBEDTLS
