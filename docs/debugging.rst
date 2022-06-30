@@ -25,6 +25,13 @@ Both SWD and JTAG are supported.
     On Windows only a single process can control a USB device, so you need to disconnect from Python when using
     OpenOCD. See :ref:`debug_sec_limitations` for other limitations and details.
 
+**************
+MPSSE Tutorial
+**************
+
+We now have a tutorial that walks you through programming and debugging a CW308_STM32F3 via ChipWhipserer,
+OpenOCD, and gdb `here <https://github.com/newaetech/chipwhisperer-jupyter/blob/master/demos/Debugging%20the%20CW308_STM32F3%20Using%20ChipWhisperer.ipynb>`_
+
 **************************
 Checking for MPSSE Support
 **************************
@@ -140,7 +147,7 @@ a firmware file onto the target:
     targets
     halt
     flash write_image erase /path/to/fw.elf
-    verify image /path/to/fw.elf
+    flash verify_image /path/to/fw.elf
     reset run
     shutdown
 
@@ -205,21 +212,59 @@ ChipWhisperer via the Python interface and via OpenOCD at the same time.
 General Limitations
 ===================
 
+Feature Limitations
+-------------------
+
+Pin Based Limitations
+^^^^^^^^^^^^^^^^^^^^^
+
+MPSSE mode takes control of some ChipWhisperer pins, meaning the following features will not be available:
+
+  * Non MPSSE target programming (STM32, XMEGA, AVR)
+  * ChipWhisperer-Husky stream mode
+  * Control of PDIC, PDID, and the SPI pins
+
+You can give normal functionality back to these pins by running the following::
+
+    scope.io.cwe.setAVRISPMode(0)
+
+MPSSE can be reenabled by running the following command::
+
+    scope.io.cwe.setAVRISPMode(1)
+
+Other Limitations
+^^^^^^^^^^^^^^^^^^^^^
+
+The following features are not available when MPSSE mode is active:
+
+  * CDC serial (normal cw.target based serial still works)
+  * ChipWhisperer-Pro stream mode
+
+To regain usage of these features, you must leave MPSSE mode by running::
+
+    scope.enable_MPSSE(0)
+
 Communication Speed
-    The communication speed cannot be adjusted and is not fixed to any one value. In practice,
-    bytes are typically sent out at a rate ~500kbps, with larger gaps between bytes.
+-------------------
+
+The communication speed cannot be adjusted and is not fixed to any one value. In practice,
+bits are typically sent out at a rate ~500kbps, with larger gaps between bytes.
 
 Unsupported MPSSE commands
-    The following MPSSE commands are not supported:
+--------------------------
 
-    * MCU Host Emulation commands
-    * General clock commands
-    * Wait on I/O high/low
-    * Adaptive clock
-    * Read data bits
+The following MPSSE commands are not supported:
+
+* MCU Host Emulation commands
+* General clock commands
+* Wait on I/O high/low
+* Adaptive clock
+* Read data bits
 
 General MPSSE Compatability
-    This implementation uses much smaller buffers than is required
-    by MPSSE (64B vs. 64KiB). As such, it is unlikely that this
-    implementation can be made to work with any software other
-    than OpenOCD.
+---------------------------
+
+This implementation uses much smaller buffers than is required
+by MPSSE (64B vs. 64KiB). As such, it is unlikely that this
+implementation can be made to work with any software other
+than OpenOCD.

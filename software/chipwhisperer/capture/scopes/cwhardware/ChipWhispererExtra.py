@@ -33,9 +33,11 @@ from ....logging import *
 
 CODE_READ = 0x80
 CODE_WRITE = 0xC0
+ADDR_ADC_TRIGGER_LEVEL = 21
 ADDR_DATA = 33
 ADDR_LEN = 34
 ADDR_BAUD = 35
+ADDR_AUX_IO = 37
 ADDR_EXTCLK = 38
 ADDR_TRIGSRC = 39
 ADDR_TRIGMOD = 40
@@ -89,6 +91,7 @@ class GPIOSettings(util.DisableNewAttr):
         ]
 
         self.HS2_VALID = {'disabled': 0, 'clkgen': 2, 'glitch': 3}
+        self._is_husky = False
 
         self.disable_newattr()
 
@@ -119,6 +122,10 @@ class GPIOSettings(util.DisableNewAttr):
         rtn['tio_states'] = self.tio_states
 
         rtn['cdc_settings'] = self.cdc_settings
+
+        if self._is_husky:
+            rtn['aux_io_mcx'] = self.aux_io_mcx
+            rtn['glitch_trig_mcx'] = self.glitch_trig_mcx
 
         return rtn
 
@@ -217,6 +224,62 @@ class GPIOSettings(util.DisableNewAttr):
         if ver < '0.30':
             return None
         return self.cwe.oa.serial.set_cdc_settings(port)
+
+    @property
+    def aux_io_mcx(self):
+        """Set the function of the AUX I/O MCX on Husky.
+        Options:
+        * "high_z": input: to use as a trigger (scope.trigger.triggers = 'mcx') or clock (scope.clock.clk_src = 'extclk_aux_io').
+        * "hs2": output: provide the same clock that's on HS2.
+        """
+        if not self._is_husky:
+            raise ValueError("For CW-Husky only.")
+        data = self.cwe.oa.sendMessage(CODE_READ, ADDR_AUX_IO, Validate=False, maxResp=1)[0]
+        if data & 0x01:
+            return "hs2"
+        else:
+            return "high_z"
+
+    @aux_io_mcx.setter
+    def aux_io_mcx(self, state):
+        if not self._is_husky:
+            raise ValueError("For CW-Husky only.")
+        data = self.cwe.oa.sendMessage(CODE_READ, ADDR_AUX_IO, Validate=False, maxResp=1)[0]
+        if state == 'high_z':
+            data &= 0xfe
+        elif state == 'hs2':
+            data |= 0x01
+        else:
+            raise ValueError("Options: high_z, hs2")
+        return self.cwe.oa.sendMessage(CODE_WRITE, ADDR_AUX_IO, [data])
+
+    @property
+    def glitch_trig_mcx(self):
+        """Set the function of the Trigger/Glitch Out MCX on Husky.
+        Options:
+        * "glitch": glitch output (clock or voltage glitch signal, as defined by scope.glitch settings)
+        * "trigger": internal trigger signal (as defined by scope.trigger)
+        """
+        if not self._is_husky:
+            raise ValueError("For CW-Husky only.")
+        data = self.cwe.oa.sendMessage(CODE_READ, ADDR_AUX_IO, Validate=False, maxResp=1)[0]
+        if data & 0x02:
+            return "glitch"
+        else:
+            return "trigger"
+
+    @glitch_trig_mcx.setter
+    def glitch_trig_mcx(self, state):
+        if not self._is_husky:
+            raise ValueError("For CW-Husky only.")
+        data = self.cwe.oa.sendMessage(CODE_READ, ADDR_AUX_IO, Validate=False, maxResp=1)[0]
+        if state == 'trigger':
+            data &= 0xfd
+        elif state == 'glitch':
+            data |= 0x02
+        else:
+            raise ValueError("Options: glitch, trig")
+        self.cwe.oa.sendMessage(CODE_WRITE, ADDR_AUX_IO, [data])
 
     @property
     def tio1(self):
@@ -584,6 +647,7 @@ class TriggerSettings(util.DisableNewAttr):
         self.last_module = "basic"
         if self.cwe.hasAux:
             self.supported_tpins['sma'] = self.cwe.PIN_FPA
+            self.supported_tpins['aux'] = self.cwe.PIN_FPA # alias for Husky since it's labeled 'Aux' on the sticker
 
         self.disable_newattr()
 
@@ -607,7 +671,8 @@ class TriggerSettings(util.DisableNewAttr):
         The trigger module uses some combination of the scope's I/O pins to
         produce a single value, which it uses for edge/level detection or UART
         triggers. This trigger output can combine 5 pins using one of 3
-        different boolean operations.
+        different boolean operations. N/A for 'trace' trigger module (see
+        scope.trace.trace_mode for how to connect trace pins.)
 
         Pins:
          * tio1-4: Target I/O pins 1-4. Note that these pins can be in any mode.
@@ -642,95 +707,101 @@ class TriggerSettings(util.DisableNewAttr):
            ValueError: if string cannot be converted to a legal mode
         """
         #Get pin logic + combo mode
-        pins, mode = self.cwe.getPins()
+        if self.module == 'trace':
+            return 'N/A (use scope.trace.trace_mode)'
+        else:
+            pins, mode = self.cwe.getPins()
 
-        tstring = []
-        if mode == self.cwe.MODE_OR: modes = "OR"
-        elif mode ==  self.cwe.MODE_AND: modes = "AND"
-        elif mode == self.cwe.MODE_NAND: modes = "NAND"
-        else: raise IOError("Unknown mode reported by hardware: %02x" % mode)
+            tstring = []
+            if mode == self.cwe.MODE_OR: modes = "OR"
+            elif mode ==  self.cwe.MODE_AND: modes = "AND"
+            elif mode == self.cwe.MODE_NAND: modes = "NAND"
+            else: raise IOError("Unknown mode reported by hardware: %02x" % mode)
 
-        if pins & self.cwe.PIN_RTIO1:
-            tstring.append("tio1")
-            tstring.append(modes)
+            if pins & self.cwe.PIN_RTIO1:
+                tstring.append("tio1")
+                tstring.append(modes)
 
-        if pins & self.cwe.PIN_RTIO2:
-            tstring.append("tio2")
-            tstring.append(modes)
+            if pins & self.cwe.PIN_RTIO2:
+                tstring.append("tio2")
+                tstring.append(modes)
 
-        if pins & self.cwe.PIN_RTIO3:
-            tstring.append("tio3")
-            tstring.append(modes)
+            if pins & self.cwe.PIN_RTIO3:
+                tstring.append("tio3")
+                tstring.append(modes)
 
-        if pins & self.cwe.PIN_RTIO4:
-            tstring.append("tio4")
-            tstring.append(modes)
+            if pins & self.cwe.PIN_RTIO4:
+                tstring.append("tio4")
+                tstring.append(modes)
 
-        if pins & self.cwe.PIN_FPA:
-            tstring.append("sma")
-            tstring.append(modes)
+            if pins & self.cwe.PIN_FPA:
+                tstring.append("sma")
+                tstring.append(modes)
 
-        if pins & self.cwe.PIN_TNRST:
-            tstring.append("nrst")
-            tstring.append(modes)
+            if pins & self.cwe.PIN_TNRST:
+                tstring.append("nrst")
+                tstring.append(modes)
 
-        #Remove last useless combination mode
-        if len(tstring) > 1:
-            tstring = tstring[0:-1]
+            #Remove last useless combination mode
+            if len(tstring) > 1:
+                tstring = tstring[0:-1]
 
-        #Return a string indicating trigger mode
-        return " ".join(tstring)
+            #Return a string indicating trigger mode
+            return " ".join(tstring)
 
     @triggers.setter
     def triggers(self, s):
 
-        s = s.lower()
+        if self.module == 'trace':
+            scope_logger.error('N/A for trace module. See scope.trace.trace_mode.')
+        else:
+            s = s.lower()
 
-        #Split up string
-        triggers = s.split()
+            #Split up string
+            triggers = s.split()
 
-        #Check there is only one type of combination mode
-        triggerset = set(triggers)
-        numcombined = int('and' in triggerset) + int('or' in triggerset) + int('nand' in triggerset)
-        if numcombined > 1:
-            raise ValueError("Combining multiple triggers requires same logic between each combination", s)
+            #Check there is only one type of combination mode
+            triggerset = set(triggers)
+            numcombined = int('and' in triggerset) + int('or' in triggerset) + int('nand' in triggerset)
+            if numcombined > 1:
+                raise ValueError("Combining multiple triggers requires same logic between each combination", s)
 
-        if numcombined == 0 and len(triggers) > 1:
-            raise ValueError("Detected more than 1 trigger pin specified, but no combination logic.", s)
+            if numcombined == 0 and len(triggers) > 1:
+                raise ValueError("Detected more than 1 trigger pin specified, but no combination logic.", s)
 
-        enablelogic = 0
+            enablelogic = 0
 
-        #Figure out enabled triggers
-        for t in list(self.supported_tpins.keys()):
-            if t in triggers:
-                if triggers.count(t) != 1:
-                    raise ValueError("Pin '%s' appears %d times, only 1 apperance supported" % (t, triggers.count(t)), s)
-                enablelogic |= self.supported_tpins[t]
+            #Figure out enabled triggers
+            for t in list(self.supported_tpins.keys()):
+                if t in triggers:
+                    if triggers.count(t) != 1:
+                        raise ValueError("Pin '%s' appears %d times, only 1 apperance supported" % (t, triggers.count(t)), s)
+                    enablelogic |= self.supported_tpins[t]
 
-        #Find mode
-        if ('or' in triggerset) or (len(triggerset) == 1):
-            mode = self.cwe.MODE_OR
-            modes = "or"
-        elif 'and' in triggerset:
-            mode = self.cwe.MODE_AND
-            modes = "and"
-        elif 'nand' in triggerset:
-            mode = self.cwe.MODE_NAND
-            modes = "nand"
+            #Find mode
+            if ('or' in triggerset) or (len(triggerset) == 1):
+                mode = self.cwe.MODE_OR
+                modes = "or"
+            elif 'and' in triggerset:
+                mode = self.cwe.MODE_AND
+                modes = "and"
+            elif 'nand' in triggerset:
+                mode = self.cwe.MODE_NAND
+                modes = "nand"
 
-        #Check mode operations in correct order, no unknown things
-        expect_tpin = True
-        for t in triggers:
-            if expect_tpin:
-                if t not in list(self.supported_tpins.keys()):
-                    raise ValueError("Error processing string at expected pin '%s'. Valid pins: %s"%(t, list(self.supported_tpins.keys())), s)
-            else:
-                if t != modes:
-                    raise ValueError("Unexpected combination mode '%s'. Expected %s."%(t, modes), s)
-            expect_tpin ^= True
+            #Check mode operations in correct order, no unknown things
+            expect_tpin = True
+            for t in triggers:
+                if expect_tpin:
+                    if t not in list(self.supported_tpins.keys()):
+                        raise ValueError("Error processing string at expected pin '%s'. Valid pins: %s"%(t, list(self.supported_tpins.keys())), s)
+                else:
+                    if t != modes:
+                        raise ValueError("Unexpected combination mode '%s'. Expected %s."%(t, modes), s)
+                expect_tpin ^= True
 
-        #Finally set this thing, guess we're looking HOT
-        self.cwe.setPins(enablelogic, mode)
+            #Finally set this thing, guess we're looking HOT
+            self.cwe.setPins(enablelogic, mode)
 
     @property
     def module(self):
@@ -817,6 +888,90 @@ class ProTrigger(TriggerSettings):
         self.cwe.oa.sendMessage(CODE_WRITE, ADDR_TRIGMOD, resp)
 
 
+class HuskyTrigger(TriggerSettings):
+    """Husky trigger object.
+    Communicates with all the trigger modules inside CW-Husky.
+    Usage depends on the active trigger module.
+    """
+
+    def _dict_repr(self):
+        rtn = OrderedDict()
+        rtn['module'] = self.module
+        if self.module == 'ADC':
+            rtn['level'] = self.level
+        elif self.module == 'basic' or self.module == 'UART':
+            rtn['triggers'] = self.triggers
+        return rtn
+
+    @property
+    def module(self):
+        """The trigger module in use.
+
+        The trigger modules available depend on the hardware. On the CWLite,
+        only the basic trigger module can be used; on the CW1200, the serial
+        data and SAD triggers are available too.
+
+        Available trigger modules:
+         * 'basic': Trigger on a logic level or edge
+         * 'ADC':   Trigger on ADC sample exceeding a threshold
+         * 'SAD':   Trigger from SAD module
+         * 'UART':  Trigger from UART module
+         * 'trace': Trigger from TraceWhisperer
+
+        :Getter: Return the active trigger module
+
+        :Setter: Sets the active trigger module
+
+        Raises:
+            ValueError: module isn't one of the available strings
+        """
+        return self.last_module
+
+    @module.setter
+    def module(self, mode):
+        if mode == "basic":
+            module = self.cwe.MODULE_BASIC
+        elif mode == "SAD":
+            module = self.cwe.MODULE_SADPATTERN
+        elif mode == "UART":
+            module = self.cwe.MODULE_DECODEIO
+        elif mode == "trace":
+            module = self.cwe.MODULE_TRACE
+        elif mode == "ADC":
+            module = self.cwe.MODULE_ADC
+        else:
+            raise ValueError("Invalid mode {}. Must be 'basic', 'SAD', 'UART', 'ADC', or 'trace'")
+
+        resp = self.cwe.oa.sendMessage(CODE_READ, ADDR_TRIGMOD,
+                                       Validate=False, maxResp=1)
+        resp[0] &= 0xF8
+        resp[0] |= module
+        resp = self.cwe.oa.sendMessage(CODE_WRITE, ADDR_TRIGMOD,
+                                       resp)
+        self.last_module = mode
+
+    @property
+    def level(self):
+        """For triggering on ADC sample exceeding a treshold,
+        when scope.trigger.module = 'ADC'.
+        Sets the trigger threshold, in the range [-0.5, 0.5].
+        If positive, triggers when the ADC sample exceeds this setting;
+        if negative, triggers when the ADC sample is below this setting.
+        Only a single trigger is issued (i.e. multiple samples exceeding
+        the threshold do not each generate a trigger; cannot be used in
+        conjunction with segmented capture).
+        """
+        offset = self.cwe.oa.offset
+        raw = int.from_bytes(self.cwe.oa.sendMessage(CODE_READ, ADDR_ADC_TRIGGER_LEVEL, Validate=False, maxResp=2), byteorder='little')
+        return raw / 2**12 - offset
+
+    @level.setter
+    def level(self, val):
+        if not (-0.5 <= val <= 0.5):
+            raise ValueError("Out of range: [-0.5, 0.5]")
+        offset = self.cwe.oa.offset
+        val = int((val + offset) * 2**12)
+        self.cwe.oa.sendMessage(CODE_WRITE, ADDR_ADC_TRIGGER_LEVEL, list(int.to_bytes(val, length=2, byteorder='little')))
 
 
 class SADTrigger(util.DisableNewAttr):
@@ -870,6 +1025,8 @@ class CWExtraSettings:
     MODULE_ADVPATTERN = 0x01
     MODULE_SADPATTERN = 0x02
     MODULE_DECODEIO = 0x03
+    MODULE_TRACE = 0x04
+    MODULE_ADC = 0x05
 
     CLOCK_FPA = 0x00
     CLOCK_FPB = 0x01
@@ -908,9 +1065,9 @@ class CWExtraSettings:
             hasAux=True
         elif cwtype == "cwhusky":
             hasFPAFPB=False
-            hasGlitchOut=False # TODO-temporary
+            hasGlitchOut=True
             hasPLL=False
-            hasAux=False
+            hasAux=True
         else:
             raise ValueError("Unknown ChipWhisperer: %s" % cwtype)
 
@@ -925,6 +1082,10 @@ class CWExtraSettings:
         self.gpiomux = GPIOSettings(self)
         self.triggermux = TriggerSettings(self)
         self.protrigger = ProTrigger(self)
+        self.huskytrigger = HuskyTrigger(self)
+
+        if cwtype == "cwhusky":
+            self.gpiomux._is_husky = True
 
 
     def _setGPIOState(self, state, IONumber):

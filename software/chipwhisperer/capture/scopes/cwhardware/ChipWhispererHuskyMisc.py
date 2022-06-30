@@ -30,6 +30,7 @@ from .. import _OpenADCInterface as OAI
 
 from ....logging import *
 import numpy as np
+import time
 
 CODE_READ = 0x80
 CODE_WRITE = 0xC0
@@ -63,6 +64,8 @@ ADDR_USERIO_CW_DRIVEN   = 86
 ADDR_USERIO_DEBUG_DRIVEN= 87
 ADDR_USERIO_DRIVE_DATA  = 88
 ADDR_USERIO_READ        = 97
+ADDR_USERIO_DEBUG_SELECT= 109
+
 ADDR_TRACE_EN           = 0xc0 + 0x2d
 
 
@@ -108,6 +111,7 @@ class XilinxDRP(util.DisableNewAttr):
             raise ValueError("Reset not defined for this DRP interface")
         self.oa.sendMessage(CODE_WRITE, self.reset_address, [1])
         self.oa.sendMessage(CODE_WRITE, self.reset_address, [0])
+
 
 
 class XilinxMMCMDRP(util.DisableNewAttr):
@@ -171,6 +175,32 @@ class XilinxMMCMDRP(util.DisableNewAttr):
             raw = lo + (hi<<6) + 0x1000
             self.drp.write(addr, raw)
         self.drp.reset()
+        if self.get_sec_div(clock=clock) != div:
+            scope_logger.error("""
+                Failed to update the MMCM secondary divider. A hard reboot of
+                Husky is likely necessary.  This likely occurred because you
+                either:
+                (1) programmed invalid MMCM parameters, or
+                (2) the MMCM had valid parameters for a particular input clock
+                frequency, but then you changed that clock frequency and this
+                made the MMCM parameters invalid (this is the likely scenario). 
+
+                To avoid this in the future, once the MMCM is operating (i.e.
+                scope.LA.clkgen_enabled = True), if you wish to change
+                the input clock frequency, first disable the MMCM, then update
+                the clock, then update the MMCM, and then re-enable the MMCM.
+
+                For example:
+                # set up initial valid settings:
+                scope.clock.clkgen_freq = 5e6
+                scope.LA.oversampling_factor = 40
+                scope.LA.clkgen_enabled = True
+                # update to new settings:
+                scope.LA.clkgen_enabled = False
+                scope.clock.clkgen_freq = 100e6
+                scope.LA.oversampling_factor = 3
+                scope.LA.clkgen_enabled = True
+                """)
 
 
     def get_mul(self):
@@ -248,10 +278,12 @@ class LEDSettings(util.DisableNewAttr):
     @property
     def setting(self):
         """Front-panel LED sources.
-            0: default: green=armed, blue=capture, top red=PLL lock fail, bottom red=glitch
-            1: green: USB clock heartbeat, blue=CLKGEN clock heartbeat
-            2: green: ADC sampling clock heartbeat, blue=PLL reference clock heartbeat
-            3: green: PLL clock heartbeat, blue=external clock change detected
+
+        #. default: green=armed, blue=capture, top red=PLL lock fail, bottom red=glitch
+        #. green: USB clock heartbeat, blue=CLKGEN clock heartbeat
+        #. green: ADC sampling clock heartbeat, blue=PLL reference clock heartbeat
+        #. green: PLL clock heartbeat, blue=external clock change detected
+
         In all cases, blinking red lights indicate a temperature, voltage, or
         sampling error (see scope.XADC.status and scope.adc.errors for details),
         whlie blinking green and blue lights indicate that a frequency change
@@ -338,14 +370,20 @@ class USERIOSettings(util.DisableNewAttr):
         """Set mode for USERIO pins:
             "normal": as defined by scope.userio.direction.
             "trace": for target trace capture.
-            "debug": for FPGA debug (look to cwhusky_top.v for signal definitions).
+            "target_debug_jtag": for target debugging with ChipWhisperer using MPSSE in JTAG mode
+            "target_debug_swd": for target debugging with ChipWhisperer using MPSSE in SWD mode
+            "fpga_debug": for FPGA debug (look to cwhusky_top.v for signal definitions).
         """
         debug = self.oa.sendMessage(CODE_READ, ADDR_USERIO_DEBUG_DRIVEN, maxResp=1)[0]
         trace = self.oa.sendMessage(CODE_READ, ADDR_TRACE_EN, maxResp=1)[0]
         if trace:
             return "trace"
-        elif debug:
-            return "debug"
+        elif debug == 1:
+            return "fpga_debug"
+        elif debug == 2:
+            return "target_debug_jtag"
+        elif debug == 6:
+            return "target_debug_swd"
         else:
             return "normal"
 
@@ -357,11 +395,32 @@ class USERIOSettings(util.DisableNewAttr):
         elif setting == 'trace':
             self.oa.sendMessage(CODE_WRITE, ADDR_USERIO_DEBUG_DRIVEN, [0])
             self.oa.sendMessage(CODE_WRITE, ADDR_TRACE_EN,            [1])
-        elif setting == 'debug':
+        elif setting == 'fpga_debug':
             self.oa.sendMessage(CODE_WRITE, ADDR_USERIO_DEBUG_DRIVEN, [1])
             self.oa.sendMessage(CODE_WRITE, ADDR_TRACE_EN,            [0])
+        elif setting == 'target_debug_jtag':
+            self.oa.sendMessage(CODE_WRITE, ADDR_USERIO_DEBUG_DRIVEN, [2])
+            self.oa.sendMessage(CODE_WRITE, ADDR_TRACE_EN,            [0])
+        elif setting == 'target_debug_swd':
+            self.oa.sendMessage(CODE_WRITE, ADDR_USERIO_DEBUG_DRIVEN, [6])
+            self.oa.sendMessage(CODE_WRITE, ADDR_TRACE_EN,            [0])
         else:
-            raise ValueError("Invalid mode; use normal/trace/debug")
+            raise ValueError("Invalid mode; use normal/trace/fpga_debug/target_debug_jtag/target_debug_swd")
+
+    @property
+    def fpga_mode(self):
+        """When scope.userio.mode = 'fpga_debug', selects which FPGA signals
+        are routed to the USERIO pins. See cwhusky_top.v for definitions.
+        """
+        return self.oa.sendMessage(CODE_READ, ADDR_USERIO_DEBUG_SELECT, maxResp=1)[0]
+
+    @fpga_mode.setter
+    def fpga_mode(self, setting):
+        if not setting in range(0, 3):
+            raise ValueError("Must be integer in [0, 2]")
+        else:
+            self.oa.sendMessage(CODE_WRITE, ADDR_USERIO_DEBUG_SELECT, [setting])
+
 
     @property
     def direction(self):
@@ -601,6 +660,7 @@ class LASettings(util.DisableNewAttr):
         rtn['clk_source'] = self.clk_source
         rtn['trigger_source'] = self.trigger_source
         rtn['oversampling_factor'] = self.oversampling_factor
+        rtn['sampling_clock_frequency'] = self.sampling_clock_frequency
         rtn['downsample'] = self.downsample
         rtn['capture_group'] = self.capture_group
         rtn['capture_depth'] = self.capture_depth
@@ -617,12 +677,15 @@ class LASettings(util.DisableNewAttr):
     def read_capture(self, source, length=None):
         """Returns captured data for specified signal source.
         What you get depends on the capture group; see the capture_group documentation.
+
         Args:
            source (int): signal to read
            length (int): number of byte to read. If unspecified, returns the full capture size
                          (which is implementation-dependent and can be learned from capture_depth)
+
         Returns:
             Numpy array of binary values.
+
         Raises:
            ValueError: invalid source
         """
@@ -674,6 +737,7 @@ class LASettings(util.DisableNewAttr):
     @property
     def capture_depth(self):
         """Number of bits captured for each signal.
+
         Args:
             depth (int): capture <depth> samples of each signal. 16-bit value, in range [1, 16376].
         """
@@ -706,7 +770,9 @@ class LASettings(util.DisableNewAttr):
         if enable:
             val = [1]
             # only one of Trace/LA can be enabled at once:
-            self._scope.trace.enabled = False
+            if self._scope.trace.enabled and self._scope.trace.capture.mode != 'off':
+                scope_logger.warning("Can't enable scope.LA and scope.trace simultaneously; turning off scope.trace.")
+                self._scope.trace.enabled = False
             self.clkgen_enabled = True
         else:
             val = [0]
@@ -885,11 +951,16 @@ class LASettings(util.DisableNewAttr):
         """The trigger used by the logic analyzer to capture.
 
         There are several different sources:
-         * "glitch": The internal glitch trigger.
+         * "glitch": The internal glitch enable trigger, one cycle earlier than the
+                     glitch output seen when scope.glitch.output = 'enable_only'. This
+                     signal is in the MMCM1 clock glitch domain.
          * "capture": The internal ADC capture trigger.
-         * "glitch_source": The internal glitch trigger in the source clock
-                            domain. This comes before "glitch", since there is
-                            a clock domain crossing from "glitch_source" to "glitch"
+         * "glitch_source": The internal manual glitch trigger in the source or target clock
+                            domain (as per scope.glitch.clk_src), which accounts for 
+                            scope.glitch.ext_offset but not scope.glitch.offset. Should
+                            only be used with scope.glitch.trigger_src = 'manual'; may
+                            not fire reliably with other settings.
+         * "glitch_trigger": The internal glitch trigger in the MMCM1 clock domain.
          * "HS1": The HS1 input clock.
 
          In addition, capture can be triggered manually, irrespective of the trigger_source
@@ -902,7 +973,7 @@ class LASettings(util.DisableNewAttr):
            Change the trigger source
 
         Raises:
-           ValueError: New value not one of "glitch" or "capture"
+           ValueError: New value not one of the options listed above.
         """
 
         return self._getTriggerSource()
@@ -914,13 +985,15 @@ class LASettings(util.DisableNewAttr):
     @property
     def oversampling_factor(self):
         """Multiplier for the sampling clock.
-        Integer in range [2,64].
+        Can be fractional, but an integer is probably what you want.
+        Whether the desired oversampling factor can be achieved depends on the
+        source clock frequency; a warning is issued if it can't.
 
         :Getter:
-           Return the oversampling factor currently in use.
+           Return the actual oversampling factor.
 
         :Setter:
-           Change the oversampling factor.
+           Set the desired oversampling factor.
         """
         return self._getOversamplingFactor()
 
@@ -928,10 +1001,26 @@ class LASettings(util.DisableNewAttr):
     def oversampling_factor(self, factor):
         self._setOversamplingFactor(factor)
 
+    @property
+    def _warning_frequency(self):
+        """Convenience function to access scope.trace.clock._warning_frequency
+        """
+        return self._scope.trace.clock._warning_frequency
+
+    @_warning_frequency.setter
+    def _warning_frequency(self, freq):
+        self._scope.trace.clock._warning_frequency = freq
+
+    @property
+    def sampling_clock_frequency(self):
+        """Report the actual sampling clock frequency.
+        """
+        return self._scope.trace.clock.swo_clock_freq
 
     @property
     def downsample(self):
         """Downsample setting.
+
         Args:
             downsample (int): capture every <downsample> samples. 16-bit value, in range [1, 2**16].
         """
@@ -948,34 +1037,41 @@ class LASettings(util.DisableNewAttr):
 
         There are three groups. The signals captured for each group are as follows:
         'glitch' (group 0):
-            0: glitch output
-            1: source clock of glitch module
-            2: glitch internal MMCM1 (offset) output
-            3: glitch internal MMCM2 (width) output
-            4: glitch trigger
-            5: capture trigger
-            6: glitch enable
-            7. glitch trigger in its source clock domain (e.g. signal 1 of this group)
+
+            #. glitch output
+            #. source clock of glitch module
+            #. glitch internal MMCM1 (offset) output
+            #. glitch internal MMCM2 (width) output
+            #. glitch go internal signal
+            #. capture trigger
+            #. glitch enable
+            #. manual glitch trigger in source clock domain (e.g. signal 1 of this group)
+            #. glitch trigger in MMCM1 clock domain
+
         'CW 20-pin' (group 1):
-            0: IO1
-            1: IO2
-            2: IO3
-            3: IO4
-            4: HS1
-            5: HS2
-            6: AUX MCX
-            7: TRIG MCX
-            8: ADC sampling clock
+
+            #. IO1
+            #. IO2
+            #. IO3
+            #. IO4
+            #. HS1
+            #. HS2
+            #. AUX MCX
+            #. TRIG MCX
+            #. ADC sampling clock
+
         'USERIO 20-pin' (group 2):
-            0: D0
-            1: D1
-            2: D2
-            3: D3
-            4: D4
-            5: D5
-            6: D6
-            7: D7
-            8: CK
+
+            #. D0
+            #. D1
+            #. D2
+            #. D3
+            #. D4
+            #. D5
+            #. D6
+            #. D7
+            #. CK
+
         'trigger debug' (group 3)
         'internal trace' (group 4)
 
@@ -1026,8 +1122,14 @@ class LASettings(util.DisableNewAttr):
             val = [2]
         elif source == 'HS1':
             val = [3]
+        elif source == 'glitch_trigger':
+            val = [4]
+        elif source == 'trigger signal 0':
+            val = [5]
+        elif source == 'trigger signal 1':
+            val = [6]
         else:
-            raise ValueError("Must be one of 'glitch', 'capture', 'glitch_source', 'HS1', or 'manual'")
+            raise ValueError("Must be one of 'glitch', 'capture', 'glitch_source', or 'HS1'")
         self.oa.sendMessage(CODE_WRITE, ADDR_LA_TRIGGER_SOURCE, val, Validate=False)
 
     def _getTriggerSource(self):
@@ -1040,15 +1142,17 @@ class LASettings(util.DisableNewAttr):
             return 'glitch_source'
         elif raw == 3:
             return 'HS1'
+        elif raw == 4:
+            return 'glitch_trigger'
+        elif raw == 5:
+            return 'trigger signal 0'
+        elif raw == 6:
+            return 'trigger signal 1'
         else:
             raise ValueError("Unexpected: read %d" % raw)
 
     def _setOversamplingFactor(self, factor):
-        # NOTE: assuming we would only ever a multiplicative factor of the source clock;
-        # otherwise, dividers can come into play.
-        self._mmcm.set_mul(factor)
-        self._mmcm.set_main_div(1)
-        self._mmcm.set_sec_div(1)
+        self._scope.trace.clock.swo_clock_freq = self._scope.trace.clock.fe_freq * factor
 
     def _getOversamplingFactor(self):
         return self._mmcm.get_mul() // (self._mmcm.get_main_div() * self._mmcm.get_sec_div())
