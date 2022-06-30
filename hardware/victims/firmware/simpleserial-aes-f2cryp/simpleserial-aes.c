@@ -27,8 +27,7 @@
 #include <stm32f2_hal_lowlevel.h>
 #include <stm32f2xx_hal_rcc.h>
 #include <stm32f2xx_hal_gpio.h>
-#include <stm32f2xx_hal_dma.h>
-// #include <stm32f2xx_hal_uart.h>
+#include <stm32f2xx_hal_dma.h> // required by stm32f2xx_hal_cryp
 #include <stm32f2xx_hal_cryp.h>
 
 /* stm32f2_hal.c */
@@ -246,9 +245,8 @@ uint8_t get_key(uint8_t* k, uint8_t len)
 
 uint8_t get_pt(uint8_t* pt, uint8_t len)
 {
-	//trigger_high();
+    // Optional: use crypt_twice
 	crypt(pt); /* encrypting the data block */
-	//trigger_low();
 	simpleserial_put('r', 16, pt);
 	return 0x00;
 }
@@ -310,14 +308,14 @@ int main(void)
     */
 
 	simpleserial_init();
-    simpleserial_addcmd('k', 16, get_key);
-    simpleserial_addcmd('p', 16,  get_pt);
-    simpleserial_addcmd('x',  0,   reset);
+    simpleserial_addcmd('k', 16,  get_key);
+    simpleserial_addcmd('p', 16,   get_pt);
+    simpleserial_addcmd('x',  0,    reset);
     simpleserial_addcmd('m', 18, get_mask);
-    simpleserial_addcmd('u', 16, push_pt);
-    simpleserial_addcmd('d',  0, process);
-    simpleserial_addcmd('o',  0,  pop_pt);
-    simpleserial_addcmd('f',  0,flush_pt);
+    simpleserial_addcmd('u', 16,  push_pt);
+    simpleserial_addcmd('d',  0,  process);
+    simpleserial_addcmd('o',  0,   pop_pt);
+    simpleserial_addcmd('f',  0, flush_pt);
     while(1)
         simpleserial_get();
 }
