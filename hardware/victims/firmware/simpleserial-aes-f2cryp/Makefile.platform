@@ -1,0 +1,2 @@
+# CRYP-enabled STM32F target
+PLATFORM = CW308_STM32F2
