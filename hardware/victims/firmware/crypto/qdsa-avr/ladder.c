@@ -1,6 +1,6 @@
 #include "fe25519.h"
 #include "ladder.h"
-#include "hal.h"
+//#include "hal.h"
 
 
 void cswap(fe25519 *x, fe25519 *y, int b)
@@ -116,7 +116,7 @@ void ladder_base_modified(ecp *r, const group_scalar *n)
 
     fe25519_setone(&base.X);
     fe25519_setone(&base.Z);
-    trigger_low();
+    //trigger_low();
     base.X.v[0] = 9;
     fe25519_copy(&basex, &base.X);
 

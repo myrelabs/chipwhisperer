@@ -11,8 +11,8 @@ ifeq ($(CRYPTO_OPTIONS),ECDH)
  SRC += dh.c
 
 else ifeq ($(CRYPTO_OPTIONS),QDSA)
- SRC += sign.c
- ASRC += hash.S
+ SRC += sign.c hash.c
+# ASRC += hash.S
 
 else
 

@@ -551,6 +551,39 @@ static const mbedtls_mpi_uint brainpoolP512r1_n[] = {
 };
 #endif /* MBEDTLS_ECP_DP_BP512R1_ENABLED */
 
+/*
+ * Domain parameters for custom96
+ */
+#if defined(MBEDTLS_ECP_DP_CUSTOM96_ENABLED)
+static const mbedtls_mpi_uint custom96_p[] = {
+    BYTES_TO_T_UINT_8( 0x4F, 0x63, 0x5A, 0x0C, 0xF4, 0x2D, 0x74, 0x6A ),
+    BYTES_TO_T_UINT_4( 0x45, 0x17, 0xFA, 0xBD),
+};
+static const mbedtls_mpi_uint custom96_a[] = {
+    BYTES_TO_T_UINT_8( 0x22, 0x92, 0x55, 0xA2, 0x2D, 0x89, 0x9F, 0x3C ),
+    BYTES_TO_T_UINT_4( 0x1A, 0x79, 0x79, 0xB6),
+};
+static const mbedtls_mpi_uint custom96_b[] = {
+    BYTES_TO_T_UINT_8( 0x27, 0xF8, 0xDE, 0xD5, 0xCC, 0x6B, 0xC2, 0x53 ),    
+    BYTES_TO_T_UINT_4( 0x03, 0x94, 0x94, 0x8A),
+};
+static const mbedtls_mpi_uint custom96_gx[] = {  
+    BYTES_TO_T_UINT_8( 0x44, 0x3A, 0xE2, 0xA0, 0xDF, 0xCD, 0xFD, 0xF2 ),
+    BYTES_TO_T_UINT_4( 0x92, 0xD1, 0x31, 0x2C),
+};
+static const mbedtls_mpi_uint custom96_gy[] = {   
+    BYTES_TO_T_UINT_8( 0x64, 0x71, 0x36, 0x3B, 0xCA, 0x85, 0x8B, 0x1B ),
+    BYTES_TO_T_UINT_4( 0x63, 0x41, 0x33, 0x10),
+};
+static const mbedtls_mpi_uint custom96_n[] = {
+    BYTES_TO_T_UINT_8( 0x87, 0x7A, 0x81, 0x24, 0x18, 0x6C, 0x73, 0x6A ),
+    BYTES_TO_T_UINT_4( 0x45, 0x17, 0xFA, 0xBD),
+};
+
+#endif /* MBEDTLS_ECP_DP_CUSTOM96_ENABLED */
+
+
+
 #if defined(MBEDTLS_ECP_DP_SECP192R1_ENABLED) ||   \
     defined(MBEDTLS_ECP_DP_SECP224R1_ENABLED) ||   \
     defined(MBEDTLS_ECP_DP_SECP256R1_ENABLED) ||   \
@@ -561,7 +594,8 @@ static const mbedtls_mpi_uint brainpoolP512r1_n[] = {
     defined(MBEDTLS_ECP_DP_BP512R1_ENABLED)   ||   \
     defined(MBEDTLS_ECP_DP_SECP192K1_ENABLED) ||   \
     defined(MBEDTLS_ECP_DP_SECP224K1_ENABLED) ||   \
-    defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED)
+    defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED) ||   \
+    defined(MBEDTLS_ECP_DP_CUSTOM96_ENABLED)
 /* For these curves, we build the group parameters dynamically. */
 #define ECP_LOAD_GROUP
 #endif
@@ -836,6 +870,12 @@ int mbedtls_ecp_group_load( mbedtls_ecp_group *grp, mbedtls_ecp_group_id id )
         case MBEDTLS_ECP_DP_BP512R1:
             return( LOAD_GROUP_A( brainpoolP512r1 ) );
 #endif /* MBEDTLS_ECP_DP_BP512R1_ENABLED */
+
+#if defined(MBEDTLS_ECP_DP_CUSTOM96_ENABLED)
+        case MBEDTLS_ECP_DP_CUSTOM96:
+            return( LOAD_GROUP_A( custom96 ) );
+#endif /* MBEDTLS_ECP_DP_CUSTOM96_ENABLED */
+
 
 #if defined(MBEDTLS_ECP_DP_CURVE25519_ENABLED)
         case MBEDTLS_ECP_DP_CURVE25519:

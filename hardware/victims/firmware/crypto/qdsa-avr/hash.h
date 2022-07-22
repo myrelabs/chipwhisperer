@@ -1,23 +1,11 @@
-/*
-The Keccak sponge function, designed by Guido Bertoni, Joan Daemen,
-Michaël Peeters and Gilles Van Assche. For more information, feedback or
-questions, please refer to our website: http://keccak.noekeon.org/
+#ifndef HASH_H
+#define HASH_H
 
-Implementation by Ronny Van Keer, hereby denoted as "the implementer".
+#define cKeccakB    1600
+#define cKeccakR    1024
+#define cKeccakR_SizeInBytes    (1344 / 8)
+#define crypto_hash_BYTES   64
 
-To the extent possible under law, the implementer has waived all copyright
-and related or neighboring rights to the source code in this file.
-http://creativecommons.org/publicdomain/zero/1.0/
-*/
-
-#ifndef _Keccak_AVR_h_
-#define _Keccak_AVR_h_
-
-#ifndef cKeccakB
-/*	Only Keccak-F1600 is supported	*/
-#define	cKeccakB	1600
-#endif
-
-extern void hash(unsigned char *out, const unsigned char *in, unsigned long long inlen );
+int hash( unsigned char *out, const unsigned char *in, unsigned long long inlen );
 
 #endif

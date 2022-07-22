@@ -109,6 +109,7 @@
          defined(MBEDTLS_ECP_DP_SECP192K1_ENABLED) || \
          defined(MBEDTLS_ECP_DP_SECP224K1_ENABLED) || \
          defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED) || \
+         defined(MBEDTLS_ECP_DP_CUSTOM96_ENABLED)  || \
          defined(MBEDTLS_ECP_DP_BP256R1_ENABLED) ||   \
          defined(MBEDTLS_ECP_DP_BP384R1_ENABLED) ||   \
          defined(MBEDTLS_ECP_DP_BP512R1_ENABLED) ) || \
@@ -157,6 +158,7 @@
     !defined(MBEDTLS_ECP_DP_BP256R1_ENABLED)   &&                  \
     !defined(MBEDTLS_ECP_DP_BP384R1_ENABLED)   &&                  \
     !defined(MBEDTLS_ECP_DP_BP512R1_ENABLED)   &&                  \
+    !defined(MBEDTLS_ECP_DP_CUSTOM96_ENABLED)   &&                  \
     !defined(MBEDTLS_ECP_DP_SECP192K1_ENABLED) &&                  \
     !defined(MBEDTLS_ECP_DP_SECP224K1_ENABLED) &&                  \
     !defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED) &&                  \

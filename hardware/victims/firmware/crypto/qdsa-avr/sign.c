@@ -76,7 +76,7 @@ int sign(
 
     trigger_high();
     ladder_base_modified(&R, &r);   //ToDo: to remove _modified
-    //trigger_low();
+    trigger_low();
     compress(&rx, &R);
 
     for(i=0;i<32;i++) { sm[32+i] = pk[i]; }
