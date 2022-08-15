@@ -778,6 +778,7 @@
 #define MBEDTLS_ECP_DP_BP256R1_ENABLED
 #define MBEDTLS_ECP_DP_BP384R1_ENABLED
 #define MBEDTLS_ECP_DP_BP512R1_ENABLED
+#define MBEDTLS_ECP_DP_CUSTOM96_ENABLED
 /* Montgomery curves (supporting ECP) */
 #define MBEDTLS_ECP_DP_CURVE25519_ENABLED
 #define MBEDTLS_ECP_DP_CURVE448_ENABLED
@@ -2904,7 +2905,7 @@
  *            it, and considering stronger message digests instead.
  *
  */
-#define MBEDTLS_MD2_C
+//#define MBEDTLS_MD2_C
 
 /**
  * \def MBEDTLS_MD4_C
@@ -2921,7 +2922,7 @@
  *            it, and considering stronger message digests instead.
  *
  */
-#define MBEDTLS_MD4_C
+//#define MBEDTLS_MD4_C
 
 /**
  * \def MBEDTLS_MD5_C
@@ -2943,7 +2944,7 @@
  *            it, and considering stronger message digests instead.
  *
  */
-#define MBEDTLS_MD5_C
+//#define MBEDTLS_MD5_C
 
 /**
  * \def MBEDTLS_MEMORY_BUFFER_ALLOC_C
@@ -3241,7 +3242,7 @@
  * Caller:  library/md.c
  *
  */
-#define MBEDTLS_RIPEMD160_C
+//#define MBEDTLS_RIPEMD160_C
 
 /**
  * \def MBEDTLS_RSA_C
