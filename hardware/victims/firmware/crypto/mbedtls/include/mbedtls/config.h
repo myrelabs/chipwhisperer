@@ -881,8 +881,7 @@
  *
  * Comment this macro to disable deterministic ECDSA.
  */
- 
-#define MBEDTLS_ECDSA_DETERMINISTIC 
+#define MBEDTLS_ECDSA_DETERMINISTIC
 
 /**
  * \def MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
@@ -2906,7 +2905,7 @@
  *            it, and considering stronger message digests instead.
  *
  */
-//#define MBEDTLS_MD2_C
+#define MBEDTLS_MD2_C
 
 /**
  * \def MBEDTLS_MD4_C
@@ -2923,7 +2922,7 @@
  *            it, and considering stronger message digests instead.
  *
  */
-//#define MBEDTLS_MD4_C
+#define MBEDTLS_MD4_C
 
 /**
  * \def MBEDTLS_MD5_C
@@ -2945,7 +2944,7 @@
  *            it, and considering stronger message digests instead.
  *
  */
-//#define MBEDTLS_MD5_C
+#define MBEDTLS_MD5_C
 
 /**
  * \def MBEDTLS_MEMORY_BUFFER_ALLOC_C
@@ -3243,7 +3242,7 @@
  * Caller:  library/md.c
  *
  */
-//#define MBEDTLS_RIPEMD160_C
+#define MBEDTLS_RIPEMD160_C
 
 /**
  * \def MBEDTLS_RSA_C
@@ -3284,7 +3283,9 @@
  *            on it, and considering stronger message digests instead.
  *
  */
-//#define MBEDTLS_SHA1_C
+#ifndef MBEDTLS_SHA1_C
+#define MBEDTLS_SHA1_C
+#endif
 
 /**
  * \def MBEDTLS_SHA256_C
