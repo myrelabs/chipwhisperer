@@ -35,8 +35,9 @@
 #include <stdlib.h>
 
 uint8_t pcsamp_enable;
+static uint16_t num_encryption_rounds = 10;
 
-uint8_t setreg(uint8_t* x)
+uint8_t setreg(uint8_t* x, uint8_t len)
 {
         uint32_t val;
         val = x[4] + (x[3] << 8) + (x[2] << 16) + (x[1] << 24);
@@ -72,7 +73,7 @@ uint8_t setreg(uint8_t* x)
 }
 
 
-uint8_t getreg(uint8_t* x)
+uint8_t getreg(uint8_t* x, uint8_t len)
 {
         uint32_t val;
         if       (x[0] == 0)    {val = DWT->CTRL;}
@@ -144,7 +145,7 @@ void enable_trace(void)
     DWT->MASK0 = 0;
     DWT->FUNCTION0 = (0 << DWT_FUNCTION_DATAVMATCH_Pos) // address match
                    | (0 << DWT_FUNCTION_CYCMATCH_Pos)
-                   | (0 << DWT_FUNCTION_EMITRANGE_Pos) 
+                   | (0 << DWT_FUNCTION_EMITRANGE_Pos)
                    | (8 << DWT_FUNCTION_FUNCTION_Pos); // Iaddr CMPMATCH event
 
     // Configure DWT PC comparator 1:
@@ -152,7 +153,7 @@ void enable_trace(void)
     DWT->MASK1 = 0;
     DWT->FUNCTION1 = (0 << DWT_FUNCTION_DATAVMATCH_Pos) // address match
                    | (0 << DWT_FUNCTION_CYCMATCH_Pos)
-                   | (0 << DWT_FUNCTION_EMITRANGE_Pos) 
+                   | (0 << DWT_FUNCTION_EMITRANGE_Pos)
                    | (8 << DWT_FUNCTION_FUNCTION_Pos); // Iaddr CMPMATCH event
 
 
@@ -165,7 +166,7 @@ void enable_trace(void)
     ETM->TEEVR = 0x000150a0;    // EmbeddedICE comparator 0 or 1 (DWT->COMP0 or DWT->COMP1)
     //ETM->TEEVR = 0x00000020;    // EmbeddedICE comparator 0 only
     //ETM->TEEVR = 0x00000021;    // EmbeddedICE comparator 1 only
-    ETM->TESSEICR = 0xf; // set EmbeddedICE watchpoint 0 as a TraceEnable start resource. 
+    ETM->TESSEICR = 0xf; // set EmbeddedICE watchpoint 0 as a TraceEnable start resource.
     ETM->TECR1 = 0; // tracing is unaffected by the trace start/stop logic
     ETM_TraceMode();
 }
@@ -196,14 +197,14 @@ void ITM_Print(int port, const char *p)
 }
 
 
-uint8_t test_itm(uint8_t* x)
+uint8_t test_itm(uint8_t* x, uint8_t len)
 {
     ITM_Print(x[0], "ITM alive!\n");
     return 0x00;
 }
 
 
-uint8_t set_pcsample_params(uint8_t* x)
+uint8_t set_pcsample_params(uint8_t* x, uint8_t len)
 {
     uint8_t postinit;
     uint8_t postreset;
@@ -248,24 +249,24 @@ void trigger_low_pcsamp(void)
 }
 
 
-uint8_t get_mask(uint8_t* m)
+uint8_t get_mask(uint8_t* m, uint8_t len)
 {
-  aes_indep_mask(m);
+  aes_indep_mask(m, len);
   return 0x00;
 }
 
 
-uint8_t get_key(uint8_t* k)
+uint8_t get_key(uint8_t* k, uint8_t len)
 {
     aes_indep_key(k);
     return 0x00;
 }
 
 
-uint8_t get_pt(uint8_t* pt)
+uint8_t get_pt(uint8_t* pt, uint8_t len)
 {
     aes_indep_enc_pretrigger(pt);
-    
+
     trigger_high_pcsamp();
 
     #ifdef ADD_JITTER
@@ -274,15 +275,39 @@ uint8_t get_pt(uint8_t* pt)
 
     aes_indep_enc(pt); /* encrypting the data block */
     trigger_low_pcsamp();
-    
+
     aes_indep_enc_posttrigger(pt);
-    
+
     simpleserial_put('r', 16, pt);
     return 0x00;
 }
 
+uint8_t enc_multi_getpt(uint8_t* pt, uint8_t len)
+{
+    aes_indep_enc_pretrigger(pt);
 
-uint8_t info(uint8_t* x)
+    for(unsigned int i = 0; i < num_encryption_rounds; i++){
+        trigger_high_pcsamp();
+        aes_indep_enc(pt);
+        trigger_low_pcsamp();
+    }
+
+    aes_indep_enc_posttrigger(pt);
+	simpleserial_put('r', 16, pt);
+    return 0;
+}
+
+uint8_t enc_multi_setnum(uint8_t* t, uint8_t len)
+{
+    //Assumes user entered a number like [0, 200] to mean "200"
+    //which is most sane looking for humans I think
+    num_encryption_rounds = t[1];
+    num_encryption_rounds |= t[0] << 8;
+    return 0;
+}
+
+
+uint8_t info(uint8_t* x, uint8_t len)
 {
         print("ChipWhisperer simpleserial-trace, compiled ");
         print(__DATE__);
@@ -293,14 +318,14 @@ uint8_t info(uint8_t* x)
 }
 
 
-uint8_t reenable_trace(uint8_t* x)
+uint8_t reenable_trace(uint8_t* x, uint8_t len)
 {
         enable_trace();
 	return 0x00;
 }
 
 
-uint8_t reset(uint8_t* x)
+uint8_t reset(uint8_t* x, uint8_t len)
 {
     // Reset key here if needed
     return 0x00;
@@ -321,13 +346,15 @@ int main(void)
     simpleserial_addcmd('k', 16, get_key);
     simpleserial_addcmd('p', 16, get_pt);
     simpleserial_addcmd('x', 0, reset);
-    simpleserial_addcmd('m', 18, get_mask);
+    simpleserial_addcmd_flags('m', 18, get_mask, CMD_FLAG_LEN);
     simpleserial_addcmd('i', 0, info);
     simpleserial_addcmd('e', 0, reenable_trace);
     simpleserial_addcmd('t', 1, test_itm);
     simpleserial_addcmd('s', 5, setreg);
     simpleserial_addcmd('g', 5, getreg);
     simpleserial_addcmd('c', 4, set_pcsample_params);
+    simpleserial_addcmd('n', 2, enc_multi_setnum);
+    simpleserial_addcmd('f', 16, enc_multi_getpt);
 
     enable_trace();
 

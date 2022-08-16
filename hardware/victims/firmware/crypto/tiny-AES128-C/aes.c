@@ -519,6 +519,13 @@ void AES128_ECB_indp_crypto(uint8_t* input)
   Cipher();
 }
 
+void AES128_ECB_indp_crypto_dec(uint8_t* input)
+{
+  state = (state_t*)input;
+  BlockCopy(input_save, input);
+  InvCipher();
+}
+
 void AES128_ECB_encrypt(uint8_t* input, uint8_t* key, uint8_t* output)
 {
   // Copy input to output, and work in-memory on output

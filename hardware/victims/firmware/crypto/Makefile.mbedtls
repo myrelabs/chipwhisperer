@@ -9,7 +9,7 @@ ifeq ($(CRYPTO_OPTIONS),AES128C)
  #######
  #*This is the recommended first version to test* 
  SRC += aes.c platform_util.c
- CDEFS += -DMBEDTLS -DMBEDTLS_SHA1_C
+ CDEFS += -DMBEDTLS
  
  ifeq ($(MBEDTLS_AES_ROM_TABLES),)
  else

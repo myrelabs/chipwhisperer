@@ -22,19 +22,19 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-uint8_t get_mask(uint8_t* m)
+uint8_t get_mask(uint8_t* m, uint8_t len)
 {
-    aes_indep_mask(m);
+    aes_indep_mask(m, len);
     return 0x00;
 }
 
-uint8_t get_key(uint8_t* k)
+uint8_t get_key(uint8_t* k, uint8_t len)
 {
     aes_indep_key(k);
     return 0x00;
 }
 
-uint8_t get_pt(uint8_t* pt)
+uint8_t get_pt(uint8_t* pt, uint8_t len)
 {
     aes_indep_dec_pretrigger(pt);
     
@@ -53,7 +53,7 @@ uint8_t get_pt(uint8_t* pt)
     return 0x00;
 }
 
-uint8_t reset(uint8_t* x)
+uint8_t reset(uint8_t* x, uint8_t len)
 {
     // Reset key here if needed
     return 0x00;
@@ -61,17 +61,17 @@ uint8_t reset(uint8_t* x)
 
 static uint16_t num_encryption_rounds = 10;
 
-uint8_t enc_multi_getpt(uint8_t* pt)
+uint8_t enc_multi_getpt(uint8_t* pt, uint8_t len)
 {
-    aes_indep_enc_pretrigger(pt);
+    aes_indep_dec_pretrigger(pt);
 
     for(unsigned int i = 0; i < num_encryption_rounds; i++){
         trigger_high();
-        aes_indep_enc(pt);
+        aes_indep_dec(pt);
         trigger_low();
     }
 
-    aes_indep_enc_posttrigger(pt);    
+    aes_indep_dec_posttrigger(pt);    
     simpleserial_put('r', 16, pt);
 }
 

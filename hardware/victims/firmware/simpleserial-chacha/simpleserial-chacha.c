@@ -16,41 +16,31 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "salsa20.h"
+#include "chacha-independant.h"
 #include "hal.h"
 #include "simpleserial.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-chacha_context_t ctx;
-
 uint8_t set_key(uint8_t* k)
 {
-//     chacha_indep_key(k);
-    chacha_setkey(&ctx, k);
+    chacha_indep_key(k);
     return 0x00;
 }
 
 uint8_t get_block(uint8_t* pt)
 {
-//     chacha_indep_enc_pretrigger(pt);
-    
+    uint8_t out[64];
+
     trigger_high();
 
   #ifdef ADD_JITTER
   for (volatile uint8_t k = 0; k < (*pt & 0x0F); k++);
   #endif
 
-//     chacha_indep_enc(pt); /* encrypting the data block */
-    uint64_t nonce, ctr;
-    uint8_t out[64];
-    memcpy(&nonce, pt,   8);
-    memcpy(&ctr,   pt+8, 8);
-    chacha_getblock(&ctx, nonce, ctr, out);
+    chacha_indep_block(pt, out); /* encrypting the data block */
     trigger_low();
-    
-//     chacha_indep_enc_posttrigger(pt);
     
     simpleserial_put('r', 64, out);
     return 0x00;
@@ -68,7 +58,7 @@ int main(void)
     init_uart();
     trigger_setup();
 
-//     chacha_indep_init();
+    chacha_indep_init();
 
     simpleserial_init();
     #if SS_VER == SS_VER_2_0
