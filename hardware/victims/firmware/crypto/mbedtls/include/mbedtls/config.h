@@ -881,8 +881,7 @@
  *
  * Comment this macro to disable deterministic ECDSA.
  */
- 
-#define MBEDTLS_ECDSA_DETERMINISTIC 
+#define MBEDTLS_ECDSA_DETERMINISTIC
 
 /**
  * \def MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
@@ -3284,7 +3283,9 @@
  *            on it, and considering stronger message digests instead.
  *
  */
-//#define MBEDTLS_SHA1_C
+#ifndef MBEDTLS_SHA1_C
+#define MBEDTLS_SHA1_C
+#endif
 
 /**
  * \def MBEDTLS_SHA256_C
