@@ -3,6 +3,8 @@
 //#include <stdint.h>
 //#include "hal.h"
 #include "simpleserial.h"
+#include "../unused-argument-util.h"
+
 
 #if defined(__arm__)
 
@@ -57,7 +59,7 @@ static int myrand( void *rng_state, unsigned char *output, size_t len )
 
 
 
-uint8_t ecdsa_gen_key(uint8_t *pt)
+uint8_t ecdsa_gen_key(uint8_t* UTILS_UNUSED_PARAM(pt), uint8_t UTILS_UNUSED_PARAM(len))
 {
     int      ret = 0;                     //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
     //const char *pers = "ecdsa";
@@ -70,9 +72,7 @@ uint8_t ecdsa_gen_key(uint8_t *pt)
     //mbedtls_ctr_drbg_init( &ctr_drbg );
 
     
-    ((void) pt);
-
-    if (key_is_empty) 
+    if (key_is_empty)
     {
         MBEDTLS_MPI_CHK( mbedtls_ecp_gen_key( ECPARAMS, &ctx, myrand, NULL ) );
         key_is_empty = 0;
@@ -91,7 +91,7 @@ cleanup:
 
 
 
-uint8_t ecdsa_set_key(uint8_t *pt)
+uint8_t ecdsa_set_key(uint8_t *pt, uint8_t UTILS_UNUSED_PARAM(len))
 {
     int      ret = 0;                     //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
     //const char *pers = "ecdsa";
@@ -126,7 +126,7 @@ cleanup:
 
 
 
-uint8_t ecdsa_gen_sig(uint8_t *pt)   //pt[0] contains the value of the length of the hash, the next pt[0] octets contains the hash value
+uint8_t ecdsa_gen_sig(uint8_t *pt, uint8_t len)
 {
     int      ret = 0;          //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
     
@@ -135,8 +135,8 @@ uint8_t ecdsa_gen_sig(uint8_t *pt)   //pt[0] contains the value of the length of
 
     mbedtls_mpi_init( &r );
     mbedtls_mpi_init( &s );
-    MBEDTLS_MPI_CHK( mbedtls_ecdsa_sign( &ctx.grp, &r, &s, &ctx.d, pt+1, pt[0], myrand, NULL ) );
-    //MBEDTLS_MPI_CHK( mbedtls_ecdsa_verify( &ctx.grp, pt+1, pt[0], &ctx.Q, &r, &s ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecdsa_sign( &ctx.grp, &r, &s, &ctx.d, pt, len, myrand, NULL ) );
+    //MBEDTLS_MPI_CHK( mbedtls_ecdsa_verify( &ctx.grp, pt, len, &ctx.Q, &r, &s ) );
 
     memset(buf_for_sig, 0, 2*(BASEPOINT_ORDER_LEN));
     MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &r, buf_for_sig, BASEPOINT_ORDER_LEN ) );
@@ -153,7 +153,7 @@ cleanup:
 
 
 
-uint8_t ecdsa_gen_sig_det(uint8_t *pt)   //pt[0] contains the value of the length of the hash, the next pt[0] octets contains the hash value
+uint8_t ecdsa_gen_sig_det(uint8_t *pt, uint8_t len)   //pt[0] contains the value of the length of the hash, the next pt[0] octets contains the hash value
 {
     int      ret = 0;          //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
     
@@ -162,7 +162,7 @@ uint8_t ecdsa_gen_sig_det(uint8_t *pt)   //pt[0] contains the value of the lengt
 
     mbedtls_mpi_init( &r );
     mbedtls_mpi_init( &s );
-    MBEDTLS_MPI_CHK( mbedtls_ecdsa_sign_det( &ctx.grp, &r, &s, &ctx.d, pt+1, pt[0], MBEDTLS_MD_SHA256 ) );
+    MBEDTLS_MPI_CHK( mbedtls_ecdsa_sign_det( &ctx.grp, &r, &s, &ctx.d, pt, len, MBEDTLS_MD_SHA256 ) );
 
     memset(buf_for_sig, 0, 2*(BASEPOINT_ORDER_LEN));
     MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &r, buf_for_sig, BASEPOINT_ORDER_LEN ) );
@@ -178,14 +178,12 @@ cleanup:
 }
 
 
-uint8_t get_pbits_nbits(uint8_t *pt)
+uint8_t get_pbits_nbits(uint8_t* UTILS_UNUSED_PARAM(pt), uint8_t UTILS_UNUSED_PARAM(len))
 {
     int      ret = 0;          //longer type than the output type, but the simplesierial_get uses a sigle octet array in ack
-    uint8_t  buffer[16];	//longer than necessary
+    uint8_t  buffer[16];	   //longer than necessary
     size_t*  ptrbuffer;
 
-    ((void) pt);
-    	
     ptrbuffer = (size_t*)buffer;
     *ptrbuffer++ = ctx.grp.pbits;
     *ptrbuffer = ctx.grp.nbits;    
