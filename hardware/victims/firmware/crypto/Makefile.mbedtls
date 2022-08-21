@@ -22,7 +22,7 @@ else ifeq ($(CRYPTO_OPTIONS),CHACHA)
  CDEFS += -DMBEDTLS
  
 else ifeq ($(CRYPTO_OPTIONS),RSA)
- SRC += rsa.c bignum.c md.c sha1.c sha256.c sha512.c oid.c platform_util.c
+ SRC += rsa.c bignum.c md.c sha256.c sha512.c oid.c platform_util.c
  CDEFS += -DMBEDTLS -DMBEDTLS_SHA
     
 #else ifeq ($(CRYPTO_OPTIONS),RSA)
