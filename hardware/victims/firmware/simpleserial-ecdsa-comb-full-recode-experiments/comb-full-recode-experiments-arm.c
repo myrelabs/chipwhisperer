@@ -2,6 +2,7 @@
 #include <string.h>
 #include "hal.h"
 #include "simpleserial.h"
+#include "../unused-argument-util.h"
 #include "mbedtls/bignum.h"
 #include "mbedtls/ecp.h"
 #include "mbedtls/ecdsa.h"
@@ -55,7 +56,7 @@ void comb_recode_init(void)
 //pt[0] indicates the index of memory region (copy), pt[1] is the length of the scalar, pt+2 points to the scalar itself
 
 
-uint8_t call_recode(uint8_t *pt)
+uint8_t call_recode(uint8_t *pt, uint8_t UTILS_UNUSED_PARAM(len))
 {
     int      ret = 0;
     uint8_t  index_of_memory_region;
