@@ -441,8 +441,12 @@ class STM32FSerial:
             for c in data:
                 crc ^= c
                 self.sp.write(chr(c))
-                if self.slow_speed:
-                    self.delay_func(5)
+            # if self.slow_speed:
+            #     for c in data:
+            #         self.sp.write(chr(c))
+            #     self.delay_func(5)
+            # else:
+            #     self.sp.write(bytes(data))
             self.sp.write(chr(crc))
             self._wait_for_ask("0x31 programming failed")
             target_logger.debug("    Write memory done")
@@ -689,8 +693,10 @@ class STM32FSerial:
                 self.cmdWriteMemory(addr, data[offs:offs + block_size])
             except CmdException:
                 # Try shrinking the block size for the writes
+                old_block_size = block_size
                 block_size = 64
-                target_logger.debug("Write with block size 256 failed, retrying with block size of 64")
+                target_logger.debug("Write with block size %(old)d failed, retrying with block size of %(new)d"
+                                    % {'old': old_block_size, 'new': block_size})
                 self.cmdWriteMemory(addr, data[offs:offs + block_size])
 
             if self.slow_speed:

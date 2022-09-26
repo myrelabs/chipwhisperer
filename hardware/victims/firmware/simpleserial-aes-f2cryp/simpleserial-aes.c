@@ -23,17 +23,28 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <stm32f2_hal.h>
-#include <stm32f2_hal_lowlevel.h>
-#include <stm32f2xx_hal_rcc.h>
-#include <stm32f2xx_hal_gpio.h>
-#include <stm32f2xx_hal_dma.h> // required by stm32f2xx_hal_cryp
-#include <stm32f2xx_hal_cryp.h>
+#if defined(STM32F2)
+    #include <stm32f2_hal.h>
+    #include <stm32f2_hal_lowlevel.h>
+    #include <stm32f2xx_hal_rcc.h>
+    #include <stm32f2xx_hal_gpio.h>
+    #include <stm32f2xx_hal_dma.h> // required by stm32f2xx_hal_cryp
+    #include <stm32f2xx_hal_cryp.h>
+#elif defined(STM32F4)
+    #include <stm32f4_hal.h>
+    #include <stm32f4_hal_lowlevel.h>
+    #include <stm32f4xx_hal_rcc.h>
+    #include <stm32f4xx_hal_gpio.h>
+    #include <stm32f4xx_hal_dma.h> // required by stm32f4xx_hal_cryp
+    #include <stm32f4xx_hal_cryp.h>
+#else
+    #error "Unsupported platform"
+#endif
 
 /* stm32f2_hal.c */
 extern uint8_t hw_key[16];
 
-#define MAX_PLAINTEXT_QUEUE 16
+#define MAX_PLAINTEXT_QUEUE 128
 uint8_t plaintext_queue[MAX_PLAINTEXT_QUEUE * 16];
 uint8_t *plaintext_queue_next_put = plaintext_queue;
 uint8_t *plaintext_queue_next_pop = plaintext_queue;
@@ -296,22 +307,11 @@ int main(void)
 
 	init();
 
-    /* Uncomment this to get a HELLO message for debug */
-
-    /*
-    putch('h');
-    putch('e');
-    putch('l');
-    putch('l');
-    putch('o');
-    putch('\n');
-    */
-
 	simpleserial_init();
     simpleserial_addcmd('k', 16,  get_key);
     simpleserial_addcmd('p', 16,   get_pt);
     simpleserial_addcmd('x',  0,    reset);
-    simpleserial_addcmd('m', 18, get_mask);
+    simpleserial_addcmd_flags('m', 18, get_mask, CMD_FLAG_LEN);
     simpleserial_addcmd('u', 16,  push_pt);
     simpleserial_addcmd('d',  0,  process);
     simpleserial_addcmd('o',  0,   pop_pt);
