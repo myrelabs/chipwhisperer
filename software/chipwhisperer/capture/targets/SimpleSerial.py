@@ -302,13 +302,13 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
             target_logger.error("Target did not ack")
             return None
         if data[0] != 'z':
-            target_logger.error("Ack error: {}".format(data))
+            target_logger.error("Ack error: {!r}".format(data))
             return None
         ret = None
         try:
             ret = int(data[1:3], 16)
         except ValueError:
-            target_logger.error("Ack error, couldn't decode return {}".format(data))
+            target_logger.error("Ack error, couldn't decode return {!r}".format(data))
             return None
         return ret
 
@@ -393,7 +393,7 @@ class SimpleSerial(TargetTemplate, util.DisableNewAttr):
         payload = bytearray(pay_len)
         if cmd_len > 0:
             if response[0:cmd_len] != cmd:
-                target_logger.warning("Unexpected start to command: {}".format(
+                target_logger.warning("Unexpected start to command: {!r}".format(
                     response[0:cmd_len]
                 ))
                 return None
