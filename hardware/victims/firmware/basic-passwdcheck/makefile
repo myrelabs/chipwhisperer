@@ -42,6 +42,7 @@ CRYPTO_OPTIONS = AES128C
 endif
 
 SS_VER = SS_VER_1_0
+CRYPTO_TARGET=NONE
 
 #Add simpleserial project to build
 include ../simpleserial/Makefile.simpleserial

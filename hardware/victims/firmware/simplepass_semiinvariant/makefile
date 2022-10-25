@@ -1,0 +1,1 @@
+include ../simplepass/Makefile.inc
