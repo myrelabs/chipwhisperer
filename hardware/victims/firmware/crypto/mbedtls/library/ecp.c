@@ -1805,14 +1805,14 @@ void ecp_comb_recode_core( unsigned char x[], size_t d,
 
 
 
-    //trigger_high(); //ToDo: to be removed
+    //trigger_high(); // (1)
     
     /* First get the classical comb values (except for x_d = 0) */
     for( i = 0; i < d; i++ )
         for( j = 0; j < w; j++ )
             x[i] |= mbedtls_mpi_get_bit( m, i + d * j ) << j;
             
-    //trigger_low();  //ToDo: to be removed - used to the simplified attack
+    //trigger_low();  // (1) - used to the simplified attack
 
 
     /* Now make sure x_1 .. x_d are odd */
@@ -1831,7 +1831,7 @@ void ecp_comb_recode_core( unsigned char x[], size_t d,
         x[i-1] |= adjust << 7;
     }
     
-    //trigger_low();  //ToDo: to be removed - used to the full attack on   ecp_comb_recode_core
+    //trigger_low();  // (2) - used to the full attack on   ecp_comb_recode_core
 }
 
 /*
@@ -2098,7 +2098,7 @@ static int ecp_mul_comb_core( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R
     }
 
 
-    //trigger_high();   //ToDo: to be removed
+    //trigger_high();   // (1)
 
     while( i != 0 )
     {
@@ -2106,13 +2106,13 @@ static int ecp_mul_comb_core( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R
         --i;
 
         MBEDTLS_MPI_CHK( ecp_double_jac( grp, R, R ) );
-        //trigger_high();   //ToDo: to be removed
+        //trigger_high();   // (2)
         MBEDTLS_MPI_CHK( ecp_select_comb( grp, &Txi, T, T_size, x[i] ) );
-        //trigger_low();   //ToDo: to be removed
+        //trigger_low();   // (1)
         MBEDTLS_MPI_CHK( ecp_add_mixed( grp, R, R, &Txi ) );
     }
 
-    //trigger_low();   //ToDo: to be removed
+    //trigger_low();   // (2)
 
 
 cleanup:
@@ -2169,7 +2169,7 @@ int ecp_comb_recode_scalar( const mbedtls_ecp_group *grp,
     MBEDTLS_MPI_CHK( mbedtls_mpi_sub_mpi( &mm, &grp->N, m ) );
 
     
-    trigger_high(); //ToDo: to be removed
+    trigger_high(); // (1)
         
     MBEDTLS_MPI_CHK( mbedtls_mpi_safe_cond_assign( &M, &mm, *parity_trick ) );
 
@@ -2177,7 +2177,7 @@ int ecp_comb_recode_scalar( const mbedtls_ecp_group *grp,
     /* actual scalar recoding */
     ecp_comb_recode_core( k, d, w, &M );
         
-    trigger_low();  //ToDo: to be removed
+    trigger_low();  // (1)
 
 
 cleanup:
