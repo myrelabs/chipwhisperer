@@ -22,6 +22,12 @@
  *  http://csrc.nist.gov/encryption/aes/rijndael/Rijndael.pdf
  *  http://csrc.nist.gov/publications/fips/fips197/fips-197.pdf
  */
+#ifdef __x86_64__
+#include <x86intrin.h>
+#else
+#include <stm32f3xx.h>
+#define __rdtsc() (DWT->CYCCNT)
+#endif
 
 #include "common.h"
 
@@ -809,25 +815,115 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 }
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
-uint32_t _lqrng_x = 0xDEADBEEF;
+#if 1
 #define LQRNG_A 1103515245
 #define LQRNG_C 12345
-static inline uint16_t _lqrng_get16(void)
+
+typedef struct lqrng_state {
+    uint32_t x;
+} lqrng_state;
+
+static inline void lqrng_init(lqrng_state* state, uint32_t seed)
 {
-    _lqrng_x *= LQRNG_A;
-    _lqrng_x += LQRNG_C;
-    return (_lqrng_x >> 12); // bits (28..12]
+    state->x = 0xDEADBEEF + seed;
 }
-static inline uint8_t _lqrng_get8(void)
+
+__attribute__((always_inline))
+static inline uint16_t lqrng_get16(lqrng_state* state)
 {
-    return _lqrng_get16(); // truncated to (20..12]
+    state->x *= LQRNG_A;
+    state->x += LQRNG_C;
+    return (state->x >> 12); // bits (28..12]
 }
-static inline uint32_t _lqrng_get32(void)
+
+__attribute__((always_inline))
+static inline uint8_t lqrng_get8(lqrng_state* state)
 {
-    return _lqrng_get16() | (_lqrng_get16() << 16);
+    return lqrng_get16(state); // truncated to (20..12]
 }
+
+__attribute__((always_inline))
+static inline uint32_t lqrng_get32(lqrng_state* state)
+{
+    return lqrng_get16(state) | (lqrng_get16(state) << 16);
+}
+
 #undef LQRNG_A
 #undef LQRNG_C
+#else /* lqrng */
+uint32_t _lqrng_state[16];
+int      _lqrng_idx_u32 = 0;
+int      _lqrng_idx_u16 = 0;
+int      _lqrng_idx_u8  = 0;
+
+static inline void _lqrng_mix(void)
+{
+    #define ROTL(a,b) ((((a) << (b)) | ((a) >> (32 - (b)))) & 0xFFFFFFFF)
+    #define QR(a, b, c, d) do {              \
+        a += b;  d ^= a;  d = ROTL(d,16);    \
+        c += d;  b ^= c;  b = ROTL(b,12);    \
+        a += b;  d ^= a;  d = ROTL(d, 8);    \
+        c += d;  b ^= c;  b = ROTL(b, 7);    \
+        } while(0)
+    // Odd round
+    QR(_lqrng_state[0], _lqrng_state[4], _lqrng_state[ 8], _lqrng_state[12]); // column 0
+    QR(_lqrng_state[1], _lqrng_state[5], _lqrng_state[ 9], _lqrng_state[13]); // column 1
+    QR(_lqrng_state[2], _lqrng_state[6], _lqrng_state[10], _lqrng_state[14]); // column 2
+    QR(_lqrng_state[3], _lqrng_state[7], _lqrng_state[11], _lqrng_state[15]); // column 3
+    // Even round
+    QR(_lqrng_state[0], _lqrng_state[5], _lqrng_state[10], _lqrng_state[15]); // diagonal 1 (main diagonal)
+    QR(_lqrng_state[1], _lqrng_state[6], _lqrng_state[11], _lqrng_state[12]); // diagonal 2
+    QR(_lqrng_state[2], _lqrng_state[7], _lqrng_state[ 8], _lqrng_state[13]); // diagonal 3
+    QR(_lqrng_state[3], _lqrng_state[4], _lqrng_state[ 9], _lqrng_state[14]); // diagonal 4
+    #undef QR
+    #undef ROTL
+}
+
+static inline void lqrng_init(void) // TODO: seed
+{
+    static const uint32_t sc[4] = { 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574 };
+    memset(_lqrng_state, 0, sizeof(_lqrng_state));
+    _lqrng_state[ 0] = sc[0];
+    _lqrng_state[ 1] = sc[1];
+    _lqrng_state[ 2] = sc[2];
+    _lqrng_state[ 3] = sc[3];
+    // TODO: add seed here
+    _lqrng_mix();
+    _lqrng_mix();
+    _lqrng_mix();
+}
+
+static inline void _lqrng_next(void)
+{
+    // TODO: ???
+    _lqrng_mix();
+    _lqrng_idx_u8 = _lqrng_idx_u16 = _lqrng_idx_u32 = 0;
+}
+
+__attribute__((always_inline))
+static inline uint32_t lqrng_get32(void)
+{
+    if(_lqrng_idx_u32 == 4) _lqrng_next();
+    return _lqrng_state[4+(_lqrng_idx_u32++)];
+}
+
+__attribute__((always_inline))
+static inline uint16_t lqrng_get16(void)
+{
+    if(_lqrng_idx_u16 == 8) _lqrng_next();
+    uint32_t idx = _lqrng_idx_u16++;
+    return _lqrng_state[8+(idx / 2)] >> ((idx % 2)*16);
+}
+
+__attribute__((always_inline))
+static inline uint8_t lqrng_get8(void)
+{
+    if(_lqrng_idx_u8 == 16) _lqrng_next();
+    uint32_t idx = _lqrng_idx_u8++;
+    return _lqrng_state[12+(idx / 4)] >> ((idx % 4)*8);
+}
+
+#endif /* lqrng */
 
 /* Lookup higher bits of 8bit x 8bit mul, xor the value to the lower half for a reduced mul*/
 static const uint8_t gf256_red_lu[256] = {
@@ -884,32 +980,62 @@ static const uint8_t gf256_sqr_lu[256] = {
 static inline uint8_t gf256_mul(uint8_t a, uint8_t b)
 {
     uint16_t c;
-    c =      (uint16_t)gf256_mul_lu[((a & 0x0F) << 4) | ((b & 0x0F)     )]
-      ^ ((   (uint16_t)gf256_mul_lu[((a & 0x0F)     ) | ((b & 0xF0)     )]
-           ^ (uint16_t)gf256_mul_lu[((a & 0xF0)     ) | ((b & 0x0F)     )] ) << 4)
-      ^ (    (uint16_t)gf256_mul_lu[((a & 0xF0)     ) | ((b & 0xF0) >> 4)]   << 8);
+    c =      (uint16_t)gf256_mul_lu[((a & 0x0F) << 4) | ((b & 0x0F))]
+      ^ ((   (uint16_t)gf256_mul_lu[((a & 0x0F)     ) | ((b & 0xF0))]
+           ^ (uint16_t)gf256_mul_lu[((a & 0xF0)     ) | ((b & 0x0F))] ) << 4)
+      ^ (    (uint16_t)gf256_mul_lu[((a & 0xF0) >> 4) | ((b & 0xF0))]   << 8);
     return (c & 0xFF) ^ gf256_red_lu[c >> 8];
 }
 
 /* Masking based on https://eprint.iacr.org/2010/441.pdf */
 
 
-#define MBEDTLS_AES_2ND_ORD_MASK
-#define MBEDTLS_AES_2ND_ORD_MASK_ROUNDS 2
+#define MBEDTLS_AES_NTH_ORD_MASK
+#define MBEDTLS_AES_NTH_ORD_MASK_ORDER  2
+#define MBEDTLS_AES_NTH_ORD_MASK_ROUNDS 2
 
-#define MASKED_SEC_MULT(C0,C1,C2,A0,A1,A2,B0,B1,B2) do {    \
-    uint8_t $r01, $r02, $r10, $r12, $r20, $r21;             \
-    $r01 = _lqrng_get8();                                   \
-    $r10 = $r01 ^ gf256_mul(A0, B1) ^ gf256_mul(A1, B0);    \
-    $r02 = _lqrng_get8();                                   \
-    $r20 = $r02 ^ gf256_mul(A0, B2) ^ gf256_mul(A2, B0);    \
-    $r12 = _lqrng_get8();                                   \
-    $r21 = $r12 ^ gf256_mul(A1, B2) ^ gf256_mul(A2, B1);    \
-    C0 = gf256_mul(A0, B0) ^ $r01 ^ $r02;                   \
-    C1 = gf256_mul(A1, B1) ^ $r10 ^ $r12;                   \
-    C2 = gf256_mul(A2, B2) ^ $r20 ^ $r21;                   \
+#define MBEDTLS_AES_AFFINE_LOOKUP 1
+
+#define MASKED_SEC_MULT(Cs,As,Bs) do {    \
+    uint8_t $r[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER]; \
+    int $x,$y;                                                                  \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){                     \
+        for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){               \
+            $r[$x][$y] = lqrng_get8(&LQRNG);                                         \
+            $r[$y][$x] = $r[$x][$y]                                             \
+                       ^ gf256_mul(As[$x], Bs[$y])                              \
+                       ^ gf256_mul(As[$y], Bs[$x]);                             \
+        }                                                                       \
+    }                                                                           \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){                     \
+        Cs[$x] = gf256_mul(As[$x], Bs[$x]);                                     \
+        for( $y = 0; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y ) if ($y != $x) {  \
+            Cs[$x] ^= $r[$x][$y];                                               \
+        }                                                                       \
+    }                                                                           \
 } while ( 0 )
 
+#ifdef MBEDTLS_AES_AFFINE_LOOKUP
+uint8_t aes_affine[256] = {
+    0x63, 0x7c, 0x5d, 0x42, 0x1f, 0x00, 0x21, 0x3e, 0x9b, 0x84, 0xa5, 0xba, 0xe7, 0xf8, 0xd9, 0xc6,
+    0x92, 0x8d, 0xac, 0xb3, 0xee, 0xf1, 0xd0, 0xcf, 0x6a, 0x75, 0x54, 0x4b, 0x16, 0x09, 0x28, 0x37,
+    0x80, 0x9f, 0xbe, 0xa1, 0xfc, 0xe3, 0xc2, 0xdd, 0x78, 0x67, 0x46, 0x59, 0x04, 0x1b, 0x3a, 0x25,
+    0x71, 0x6e, 0x4f, 0x50, 0x0d, 0x12, 0x33, 0x2c, 0x89, 0x96, 0xb7, 0xa8, 0xf5, 0xea, 0xcb, 0xd4,
+    0xa4, 0xbb, 0x9a, 0x85, 0xd8, 0xc7, 0xe6, 0xf9, 0x5c, 0x43, 0x62, 0x7d, 0x20, 0x3f, 0x1e, 0x01,
+    0x55, 0x4a, 0x6b, 0x74, 0x29, 0x36, 0x17, 0x08, 0xad, 0xb2, 0x93, 0x8c, 0xd1, 0xce, 0xef, 0xf0,
+    0x47, 0x58, 0x79, 0x66, 0x3b, 0x24, 0x05, 0x1a, 0xbf, 0xa0, 0x81, 0x9e, 0xc3, 0xdc, 0xfd, 0xe2,
+    0xb6, 0xa9, 0x88, 0x97, 0xca, 0xd5, 0xf4, 0xeb, 0x4e, 0x51, 0x70, 0x6f, 0x32, 0x2d, 0x0c, 0x13,
+    0xec, 0xf3, 0xd2, 0xcd, 0x90, 0x8f, 0xae, 0xb1, 0x14, 0x0b, 0x2a, 0x35, 0x68, 0x77, 0x56, 0x49,
+    0x1d, 0x02, 0x23, 0x3c, 0x61, 0x7e, 0x5f, 0x40, 0xe5, 0xfa, 0xdb, 0xc4, 0x99, 0x86, 0xa7, 0xb8,
+    0x0f, 0x10, 0x31, 0x2e, 0x73, 0x6c, 0x4d, 0x52, 0xf7, 0xe8, 0xc9, 0xd6, 0x8b, 0x94, 0xb5, 0xaa,
+    0xfe, 0xe1, 0xc0, 0xdf, 0x82, 0x9d, 0xbc, 0xa3, 0x06, 0x19, 0x38, 0x27, 0x7a, 0x65, 0x44, 0x5b,
+    0x2b, 0x34, 0x15, 0x0a, 0x57, 0x48, 0x69, 0x76, 0xd3, 0xcc, 0xed, 0xf2, 0xaf, 0xb0, 0x91, 0x8e,
+    0xda, 0xc5, 0xe4, 0xfb, 0xa6, 0xb9, 0x98, 0x87, 0x22, 0x3d, 0x1c, 0x03, 0x5e, 0x41, 0x60, 0x7f,
+    0xc8, 0xd7, 0xf6, 0xe9, 0xb4, 0xab, 0x8a, 0x95, 0x30, 0x2f, 0x0e, 0x11, 0x4c, 0x53, 0x72, 0x6d,
+    0x39, 0x26, 0x07, 0x18, 0x45, 0x5a, 0x7b, 0x64, 0xc1, 0xde, 0xff, 0xe0, 0xbd, 0xa2, 0x83, 0x9c,
+};
+#define AES_AFFINE(X) do { X = aes_affine[X]; } while(0)
+#else
 #define AES_AFFINE(X) do {                              \
     uint8_t $t;                                         \
     $t = X;  $t = ( ( $t << 1 ) | ( $t >> 7 ) ) & 0xFF; \
@@ -918,106 +1044,220 @@ static inline uint8_t gf256_mul(uint8_t a, uint8_t b)
     X ^= $t; $t = ( ( $t << 1 ) | ( $t >> 7 ) ) & 0xFF; \
     X ^= $t ^ 0x63;                                     \
 } while ( 0 )
+#endif
 
-#define MASKED_SBOX(Y0,Y1,Y2,X0,X1,X2) do {             \
-    uint8_t $z0, $z1, $z2, $w0, $w1, $w2, $t1, $t2;     \
-    /* zi = Xi^2, z = X^2 */                            \
-    $t2 = _lqrng_get8();                                \
-    $z2 = gf256_sqr_lu[X2] ^ $t2;                       \
-    $t1 = _lqrng_get8();                                \
-    $z1 = gf256_sqr_lu[X1] ^ $t1;                       \
-    $z0 = gf256_sqr_lu[X0] ^ $t1 ^ $t2;                 \
-    /* Yi = Xi*zi, Y = X^3 */                           \
-    MASKED_SEC_MULT(Y0,Y1,Y2,$z0,$z1,$z2,X0,X1,X2);     \
-    /* wi = Yi^4, w = X^12 */                           \
-    $t2 = _lqrng_get8();                                \
-    $w2 = gf256_sqr_lu[gf256_sqr_lu[Y2]] ^ $t2;         \
-    $t1 = _lqrng_get8();                                \
-    $w1 = gf256_sqr_lu[gf256_sqr_lu[Y1]] ^ $t1;         \
-    $w0 = gf256_sqr_lu[gf256_sqr_lu[Y0]] ^ $t1 ^ $t2;   \
-    /* Yi = Yi*wi, Y = X^15 */                          \
-    MASKED_SEC_MULT(Y0,Y1,Y2,Y0,Y1,Y2,$w0,$w1,$w2);     \
-    /* Yi = Yi^16, Y = X^240 */                         \
-    Y2 = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Y2]]]];\
-    Y1 = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Y1]]]];\
-    Y0 = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Y0]]]];\
-    /* Yi = Yi*wi, Y = X^252 */                         \
-    MASKED_SEC_MULT(Y0,Y1,Y2,Y0,Y1,Y2,$w0,$w1,$w2);     \
-    /* Yi = Yi*zi, Y = X^254 */                         \
-    MASKED_SEC_MULT(Y0,Y1,Y2,Y0,Y1,Y2,$z0,$z1,$z2);     \
-    AES_AFFINE(Y0); AES_AFFINE(Y1); AES_AFFINE(Y2);     \
+
+#define MASKED_EXP254(Ys,Xs) do {                                               \
+    uint8_t $z[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
+            $w[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
+            $t1, $t2;                                                           \
+    int $x;                                                                     \
+    /* zi = Xi^2, z = X^2 */                                                    \
+    $t1 = 0;                                                                    \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++$x ){                   \
+        $t2 = lqrng_get8(&LQRNG);                                                    \
+        $z[$x] = gf256_sqr_lu[Xs[$x]] ^ $t1 ^ $t2;                              \
+        $t1 = $t2;                                                              \
+    }                                                                           \
+    $z[$x] = gf256_sqr_lu[Xs[$x]] ^ $t1;                                        \
+    /* Yi = Xi*zi, Y = X^3 */                                                   \
+    MASKED_SEC_MULT(Ys,$z,Xs);                                                  \
+    /* wi = Yi^4, w = X^12 */                                                   \
+    $t1 = 0;                                                                    \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++$x ){                   \
+        $t2 = lqrng_get8(&LQRNG);                                                    \
+        $w[$x] = gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]] ^ $t1 ^ $t2;                \
+        $t1 = $t2;                                                              \
+    }                                                                           \
+    $w[$x] = gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]] ^ $t1;                          \
+    /* Yi = Yi*wi, Y = X^15 */                                                  \
+    MASKED_SEC_MULT(Ys,Ys,$w);                                                  \
+    /* Yi = Yi^16, Y = X^240 */                                                 \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){                     \
+        Ys[$x] = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]]]];\
+    }                                                                           \
+    /* Yi = Yi*wi, Y = X^252 */                                                 \
+    MASKED_SEC_MULT(Ys,Ys,$w);                                                  \
+    /* Yi = Yi*zi, Y = X^254 */                                                 \
+    MASKED_SEC_MULT(Ys,Ys,$z);                                                  \
 } while ( 0 )
 
-#define AES_MASKED_FTx(x,X0,X1,X2,Y0,Y1,Y2,i) do {  \
-    uint8_t $sb0, $sb1, $sb2, $y0, $y1, $y2;        \
-    $y0 = ((Y0) >> ((i)*8)) & 0xFF;                 \
-    $y1 = ((Y1) >> ((i)*8)) & 0xFF;                 \
-    $y2 = ((Y2) >> ((i)*8)) & 0xFF;                 \
-    MASKED_SBOX($sb0, $sb1, $sb2, $y0, $y1, $y2);   \
-    (X0) ^= AES_FT##x(RSb[$sb0]);                   \
-    (X1) ^= AES_FT##x(RSb[$sb1]);                   \
-    (X2) ^= AES_FT##x(RSb[$sb2]);                   \
+#define MASKED_SBOX(Ys,Xs) do {                                                 \
+    int $x;                                                                     \
+    MASKED_EXP254(Ys,Xs);                                                       \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){                     \
+        AES_AFFINE(Ys[$x]);                                                     \
+    }                                                                           \
+    if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { Ys[0] ^= 0x63; }                \
 } while ( 0 )
 
-#define AES_MASKED_FSUBROUND(X0,X1,X2,RK0,RK1,RK2,  \
-                             Y00,Y01,Y02,Y03,       \
-                             Y10,Y11,Y12,Y13,       \
-                             Y20,Y21,Y22,Y23 )      \
-    do {                                            \
-        (X0) = *RK0++;                              \
-        (X1) = *RK1++;                              \
-        (X2) = *RK2++;                              \
-        AES_MASKED_FTx(0, X0,X1,X2,Y00,Y10,Y20,0);  \
-        AES_MASKED_FTx(1, X0,X1,X2,Y01,Y11,Y21,1);  \
-        AES_MASKED_FTx(2, X0,X1,X2,Y02,Y12,Y22,2);  \
-        AES_MASKED_FTx(3, X0,X1,X2,Y03,Y13,Y23,3);  \
+#define MC \
+    V(00,00,00,00), V(03,01,01,02), V(06,02,02,04), V(05,03,03,06), \
+    V(0c,04,04,08), V(0f,05,05,0a), V(0a,06,06,0c), V(09,07,07,0e), \
+    V(18,08,08,10), V(1b,09,09,12), V(1e,0a,0a,14), V(1d,0b,0b,16), \
+    V(14,0c,0c,18), V(17,0d,0d,1a), V(12,0e,0e,1c), V(11,0f,0f,1e), \
+    V(30,10,10,20), V(33,11,11,22), V(36,12,12,24), V(35,13,13,26), \
+    V(3c,14,14,28), V(3f,15,15,2a), V(3a,16,16,2c), V(39,17,17,2e), \
+    V(28,18,18,30), V(2b,19,19,32), V(2e,1a,1a,34), V(2d,1b,1b,36), \
+    V(24,1c,1c,38), V(27,1d,1d,3a), V(22,1e,1e,3c), V(21,1f,1f,3e), \
+    V(60,20,20,40), V(63,21,21,42), V(66,22,22,44), V(65,23,23,46), \
+    V(6c,24,24,48), V(6f,25,25,4a), V(6a,26,26,4c), V(69,27,27,4e), \
+    V(78,28,28,50), V(7b,29,29,52), V(7e,2a,2a,54), V(7d,2b,2b,56), \
+    V(74,2c,2c,58), V(77,2d,2d,5a), V(72,2e,2e,5c), V(71,2f,2f,5e), \
+    V(50,30,30,60), V(53,31,31,62), V(56,32,32,64), V(55,33,33,66), \
+    V(5c,34,34,68), V(5f,35,35,6a), V(5a,36,36,6c), V(59,37,37,6e), \
+    V(48,38,38,70), V(4b,39,39,72), V(4e,3a,3a,74), V(4d,3b,3b,76), \
+    V(44,3c,3c,78), V(47,3d,3d,7a), V(42,3e,3e,7c), V(41,3f,3f,7e), \
+    V(c0,40,40,80), V(c3,41,41,82), V(c6,42,42,84), V(c5,43,43,86), \
+    V(cc,44,44,88), V(cf,45,45,8a), V(ca,46,46,8c), V(c9,47,47,8e), \
+    V(d8,48,48,90), V(db,49,49,92), V(de,4a,4a,94), V(dd,4b,4b,96), \
+    V(d4,4c,4c,98), V(d7,4d,4d,9a), V(d2,4e,4e,9c), V(d1,4f,4f,9e), \
+    V(f0,50,50,a0), V(f3,51,51,a2), V(f6,52,52,a4), V(f5,53,53,a6), \
+    V(fc,54,54,a8), V(ff,55,55,aa), V(fa,56,56,ac), V(f9,57,57,ae), \
+    V(e8,58,58,b0), V(eb,59,59,b2), V(ee,5a,5a,b4), V(ed,5b,5b,b6), \
+    V(e4,5c,5c,b8), V(e7,5d,5d,ba), V(e2,5e,5e,bc), V(e1,5f,5f,be), \
+    V(a0,60,60,c0), V(a3,61,61,c2), V(a6,62,62,c4), V(a5,63,63,c6), \
+    V(ac,64,64,c8), V(af,65,65,ca), V(aa,66,66,cc), V(a9,67,67,ce), \
+    V(b8,68,68,d0), V(bb,69,69,d2), V(be,6a,6a,d4), V(bd,6b,6b,d6), \
+    V(b4,6c,6c,d8), V(b7,6d,6d,da), V(b2,6e,6e,dc), V(b1,6f,6f,de), \
+    V(90,70,70,e0), V(93,71,71,e2), V(96,72,72,e4), V(95,73,73,e6), \
+    V(9c,74,74,e8), V(9f,75,75,ea), V(9a,76,76,ec), V(99,77,77,ee), \
+    V(88,78,78,f0), V(8b,79,79,f2), V(8e,7a,7a,f4), V(8d,7b,7b,f6), \
+    V(84,7c,7c,f8), V(87,7d,7d,fa), V(82,7e,7e,fc), V(81,7f,7f,fe), \
+    V(9b,80,80,1b), V(98,81,81,19), V(9d,82,82,1f), V(9e,83,83,1d), \
+    V(97,84,84,13), V(94,85,85,11), V(91,86,86,17), V(92,87,87,15), \
+    V(83,88,88,0b), V(80,89,89,09), V(85,8a,8a,0f), V(86,8b,8b,0d), \
+    V(8f,8c,8c,03), V(8c,8d,8d,01), V(89,8e,8e,07), V(8a,8f,8f,05), \
+    V(ab,90,90,3b), V(a8,91,91,39), V(ad,92,92,3f), V(ae,93,93,3d), \
+    V(a7,94,94,33), V(a4,95,95,31), V(a1,96,96,37), V(a2,97,97,35), \
+    V(b3,98,98,2b), V(b0,99,99,29), V(b5,9a,9a,2f), V(b6,9b,9b,2d), \
+    V(bf,9c,9c,23), V(bc,9d,9d,21), V(b9,9e,9e,27), V(ba,9f,9f,25), \
+    V(fb,a0,a0,5b), V(f8,a1,a1,59), V(fd,a2,a2,5f), V(fe,a3,a3,5d), \
+    V(f7,a4,a4,53), V(f4,a5,a5,51), V(f1,a6,a6,57), V(f2,a7,a7,55), \
+    V(e3,a8,a8,4b), V(e0,a9,a9,49), V(e5,aa,aa,4f), V(e6,ab,ab,4d), \
+    V(ef,ac,ac,43), V(ec,ad,ad,41), V(e9,ae,ae,47), V(ea,af,af,45), \
+    V(cb,b0,b0,7b), V(c8,b1,b1,79), V(cd,b2,b2,7f), V(ce,b3,b3,7d), \
+    V(c7,b4,b4,73), V(c4,b5,b5,71), V(c1,b6,b6,77), V(c2,b7,b7,75), \
+    V(d3,b8,b8,6b), V(d0,b9,b9,69), V(d5,ba,ba,6f), V(d6,bb,bb,6d), \
+    V(df,bc,bc,63), V(dc,bd,bd,61), V(d9,be,be,67), V(da,bf,bf,65), \
+    V(5b,c0,c0,9b), V(58,c1,c1,99), V(5d,c2,c2,9f), V(5e,c3,c3,9d), \
+    V(57,c4,c4,93), V(54,c5,c5,91), V(51,c6,c6,97), V(52,c7,c7,95), \
+    V(43,c8,c8,8b), V(40,c9,c9,89), V(45,ca,ca,8f), V(46,cb,cb,8d), \
+    V(4f,cc,cc,83), V(4c,cd,cd,81), V(49,ce,ce,87), V(4a,cf,cf,85), \
+    V(6b,d0,d0,bb), V(68,d1,d1,b9), V(6d,d2,d2,bf), V(6e,d3,d3,bd), \
+    V(67,d4,d4,b3), V(64,d5,d5,b1), V(61,d6,d6,b7), V(62,d7,d7,b5), \
+    V(73,d8,d8,ab), V(70,d9,d9,a9), V(75,da,da,af), V(76,db,db,ad), \
+    V(7f,dc,dc,a3), V(7c,dd,dd,a1), V(79,de,de,a7), V(7a,df,df,a5), \
+    V(3b,e0,e0,db), V(38,e1,e1,d9), V(3d,e2,e2,df), V(3e,e3,e3,dd), \
+    V(37,e4,e4,d3), V(34,e5,e5,d1), V(31,e6,e6,d7), V(32,e7,e7,d5), \
+    V(23,e8,e8,cb), V(20,e9,e9,c9), V(25,ea,ea,cf), V(26,eb,eb,cd), \
+    V(2f,ec,ec,c3), V(2c,ed,ed,c1), V(29,ee,ee,c7), V(2a,ef,ef,c5), \
+    V(0b,f0,f0,fb), V(08,f1,f1,f9), V(0d,f2,f2,ff), V(0e,f3,f3,fd), \
+    V(07,f4,f4,f3), V(04,f5,f5,f1), V(01,f6,f6,f7), V(02,f7,f7,f5), \
+    V(13,f8,f8,eb), V(10,f9,f9,e9), V(15,fa,fa,ef), V(16,fb,fb,ed), \
+    V(1f,fc,fc,e3), V(1c,fd,fd,e1), V(19,fe,fe,e7), V(1a,ff,ff,e5)
+
+#define V(a,b,c,d) 0x##a##b##c##d
+static const uint32_t MC0[256] = { MC };
+#undef V
+
+#if !defined(MBEDTLS_AES_FEWER_TABLES)
+
+#define V(a,b,c,d) 0x##b##c##d##a
+static const uint32_t MC1[256] = { MC };
+#undef V
+
+#define V(a,b,c,d) 0x##c##d##a##b
+static const uint32_t MC2[256] = { MC };
+#undef V
+
+#define V(a,b,c,d) 0x##d##a##b##c
+static const uint32_t MC3[256] = { MC };
+#undef V
+
+#endif /* !MBEDTLS_AES_FEWER_TABLES */
+
+#undef MC
+
+#if defined(MBEDTLS_AES_FEWER_TABLES)
+
+#define AES_MC0(idx) MC0[idx]
+#define AES_MC1(idx) ROTL8(  MC0[idx] )
+#define AES_MC2(idx) ROTL16( MC0[idx] )
+#define AES_MC3(idx) ROTL24( MC0[idx] )
+
+#else /* MBEDTLS_AES_FEWER_TABLES */
+
+#define AES_MC0(idx) MC0[idx]
+#define AES_MC1(idx) MC1[idx]
+#define AES_MC2(idx) MC2[idx]
+#define AES_MC3(idx) MC3[idx]
+
+#endif /* MBEDTLS_AES_FEWER_TABLES */
+
+#define AES_MASKED_FTx(x,Xs,Ys,i) do {                          \
+    int $x;                                                     \
+    uint8_t $sb[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                \
+            $yv[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){     \
+        $yv[$x] = ((Ys[$x]) >> ((i)*8)) & 0xFF;                 \
+    }                                                           \
+    MASKED_SBOX($sb, $yv);                                      \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){     \
+        /* Xs[$x] ^= AES_FT##x(RSb[$sb[$x]]); */                      \
+        Xs[$x] ^= AES_MC##x($sb[$x]);                           \
+    }                                                           \
+} while ( 0 )
+
+#define AES_MASKED_FSUBROUND(Xs,RK,mRKs,Y0s,Y1s,Y2s,Y3s)        \
+    do {                                                        \
+        int $x;                                                 \
+        Xs[0] = *RK++;                                          \
+        for( $x = 1; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+            Xs[$x] = *mRKs[$x-1]++;                             \
+        }                                                       \
+        AES_MASKED_FTx(0, Xs,Y0s,0);                            \
+        AES_MASKED_FTx(1, Xs,Y1s,1);                            \
+        AES_MASKED_FTx(2, Xs,Y2s,2);                            \
+        AES_MASKED_FTx(3, Xs,Y3s,3);                            \
     } while ( 0 )
 
-#define AES_MASKED_FROUND(X00,X01,X02,X03,X10,X11,X12,X13,X20,X21,X22,X23,\
-                          Y00,Y01,Y02,Y03,Y10,Y11,Y12,Y13,Y20,Y21,Y22,Y23,\
-                          RK0,RK1,RK2)                  \
-    do {                                                \
-        AES_MASKED_FSUBROUND(X00,X10,X20,RK0,RK1,RK2,   \
-                             Y00,Y01,Y02,Y03,           \
-                             Y10,Y11,Y12,Y13,           \
-                             Y20,Y21,Y22,Y23);          \
-        AES_MASKED_FSUBROUND(X01,X11,X21,RK0,RK1,RK2,   \
-                             Y01,Y02,Y03,Y00,           \
-                             Y11,Y12,Y13,Y10,           \
-                             Y21,Y22,Y23,Y20);          \
-        AES_MASKED_FSUBROUND(X02,X12,X22,RK0,RK1,RK2,   \
-                             Y02,Y03,Y00,Y01,           \
-                             Y12,Y13,Y10,Y11,           \
-                             Y22,Y23,Y20,Y21);          \
-        AES_MASKED_FSUBROUND(X03,X13,X23,RK0,RK1,RK2,   \
-                             Y03,Y00,Y01,Y02,           \
-                             Y13,Y10,Y11,Y12,           \
-                             Y23,Y20,Y21,Y22);          \
+#define AES_MASKED_FROUND(Xss, Yss, RK, mRKs)               \
+    do {                                                    \
+        AES_MASKED_FSUBROUND(Xss[0],RK,mRKs,                \
+                             Yss[0],Yss[1],Yss[2],Yss[3]);  \
+        AES_MASKED_FSUBROUND(Xss[1],RK,mRKs,                \
+                             Yss[1],Yss[2],Yss[3],Yss[0]);  \
+        AES_MASKED_FSUBROUND(Xss[2],RK,mRKs,                \
+                             Yss[2],Yss[3],Yss[0],Yss[1]);  \
+        AES_MASKED_FSUBROUND(Xss[3],RK,mRKs,                \
+                             Yss[3],Yss[0],Yss[1],Yss[2]);  \
     } while ( 0 )
 
-#define AES_MASKED_FINAL_FSb(X0,X1,X2,Y0,Y1,Y2,i) do {  \
-    uint8_t $sb0, $sb1, $sb2, $y0, $y1, $y2;        \
-    $y0 = ((Y0) >> ((i)*8)) & 0xFF;                 \
-    $y1 = ((Y1) >> ((i)*8)) & 0xFF;                 \
-    $y2 = ((Y2) >> ((i)*8)) & 0xFF;                 \
-    MASKED_SBOX($sb0, $sb1, $sb2, $y0, $y1, $y2);   \
-    (X0) ^= (uint32_t)($sb0) << ((i)*8);              \
-    (X1) ^= (uint32_t)($sb1) << ((i)*8);              \
-    (X2) ^= (uint32_t)($sb2) << ((i)*8);              \
+#define AES_MASKED_FINAL_FSb(Xs,Ys,i) do {                  \
+    int $x;                                                 \
+    uint8_t $sb[MBEDTLS_AES_NTH_ORD_MASK_ORDER],            \
+            $yv[MBEDTLS_AES_NTH_ORD_MASK_ORDER];            \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+        $yv[$x] = ((Ys[$x]) >> ((i)*8)) & 0xFF;             \
+    }                                                       \
+    MASKED_SBOX($sb, $yv);                                  \
+    for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+        (Xs[$x]) ^= (uint32_t)($sb[$x]) << ((i)*8);         \
+    }                                                       \
 } while ( 0 )
 
-#define AES_MASKED_FINAL_FSUBROUND(X0,X1,X2,RK0,RK1,RK2,  \
-                                   Y00,Y01,Y02,Y03,       \
-                                   Y10,Y11,Y12,Y13,       \
-                                   Y20,Y21,Y22,Y23 )      \
-    do {                                            \
-        (X0) = *RK0++;                              \
-        (X1) = *RK1++;                              \
-        (X2) = *RK2++;                              \
-        AES_MASKED_FINAL_FSb(X0,X1,X2,Y00,Y10,Y20,0);  \
-        AES_MASKED_FINAL_FSb(X0,X1,X2,Y01,Y11,Y21,1);  \
-        AES_MASKED_FINAL_FSb(X0,X1,X2,Y02,Y12,Y22,2);  \
-        AES_MASKED_FINAL_FSb(X0,X1,X2,Y03,Y13,Y23,3);  \
+#define AES_MASKED_FINAL_FSUBROUND(Xs,RK,mRKs,Y0s,Y1s,Y2s,Y3s ) \
+    do {                                                        \
+        int $x;                                                 \
+        Xs[0] = *RK++;                                          \
+        for( $x = 1; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+            Xs[$x] = *mRKs[$x-1]++;                             \
+        }                                                       \
+        AES_MASKED_FINAL_FSb(Xs,Y0s,0);                         \
+        AES_MASKED_FINAL_FSb(Xs,Y1s,1);                         \
+        AES_MASKED_FINAL_FSb(Xs,Y2s,2);                         \
+        AES_MASKED_FINAL_FSb(Xs,Y3s,3);                         \
     } while ( 0 )
 
 #define AES_FROUND(X0,X1,X2,X3,Y0,Y1,Y2,Y3)                     \
@@ -1068,6 +1308,8 @@ static inline uint8_t gf256_mul(uint8_t a, uint8_t b)
                        AES_RT3( ( (Y0) >> 24 ) & 0xFF );    \
     } while( 0 )
 
+uint64_t aes_timing_table[32];
+
 /*
  * AES-ECB block encryption
  */
@@ -1078,138 +1320,151 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 {
     int i;
     uint32_t *RK = ctx->rk;
+    #ifdef MBEDTLS_AES_NTH_ORD_MASK
+    int j, k;
+    uint32_t tmp0, tmp1;
+    struct
+    {
+        uint32_t X[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
+        uint32_t Y[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
+    } t;
+    lqrng_state LQRNG;
+
+    memset(aes_timing_table, 0, sizeof(aes_timing_table));
+    uint64_t* tt = aes_timing_table;
+    #define NEXT_TS()  { *(tt++) = __rdtsc(); }
+    NEXT_TS();
+
+    lqrng_init(&LQRNG, (uint32_t)__rdtsc());
+
+    // TODO: mRK should be part of regular key schedule
+    uint32_t mRK[MBEDTLS_AES_NTH_ORD_MASK_ROUNDS * 4 * MBEDTLS_AES_NTH_ORD_MASK_ORDER], *mRKs[MBEDTLS_AES_NTH_ORD_MASK_ORDER-1];
+    for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
+        mRKs[k] = &mRK[MBEDTLS_AES_NTH_ORD_MASK_ROUNDS * 4 * k];
+    }
+
+    for( i=0; i<4; ++i)
+    {
+        // once mRK is part of key schedule, use mRK shares instead
+        for( j=0; j<MBEDTLS_AES_NTH_ORD_MASK_ROUNDS; ++j)
+        {
+            tmp0 = 0;
+            for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
+                tmp1 = lqrng_get32(&LQRNG);
+                mRKs[k][i+4*j] = tmp0 ^ tmp1;
+                tmp0 = tmp1;
+            }
+            RK[4*(j+1)] ^= tmp0;
+        }
+
+        tmp0 = *(RK++);
+        for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+            tmp1 = lqrng_get32(&LQRNG);
+            t.X[i][k] = tmp0 ^ tmp1;
+            tmp0 = tmp1;
+        }
+        GET_UINT32_LE( t.X[i][0], input,  4*i ); 
+        t.X[i][0] ^= tmp0;
+    }
+
+    NEXT_TS();
+
+    // This impl assumes MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 2,
+    // TODO: implement MBEDTLS_AES_NTH_ORD_MASK_ROUNDS != 2
+
+    // for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+    //     printf("X%d %08x %08x %08x %08x\n", k, t.X[0][k], t.X[1][k], t.X[2][k], t.X[3][k]);
+    // }
+    
+    AES_MASKED_FROUND(t.Y, t.X, RK, mRKs);
+    NEXT_TS();
+    AES_MASKED_FROUND(t.X, t.Y, RK, mRKs);
+    NEXT_TS();
+    for(i=0;i<4;++i) {
+        for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+            t.X[i][0] ^= t.X[i][k];
+        }
+    }
+    NEXT_TS();
+
+    for( i = ( ctx->nr >> 1 ) - 2; i > 0; i-- )
+    {
+        // printf("X  %08x %08x %08x %08x\n", t.X[0][0], t.X[1][0], t.X[2][0], t.X[3][0]);
+        AES_FROUND( t.Y[0][0], t.Y[1][0], t.Y[2][0], t.Y[3][0], t.X[0][0], t.X[1][0], t.X[2][0], t.X[3][0] );
+        AES_FROUND( t.X[0][0], t.X[1][0], t.X[2][0], t.X[3][0], t.Y[0][0], t.Y[1][0], t.Y[2][0], t.Y[3][0] );
+    }
+
+    NEXT_TS();
+
+    for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
+        mRKs[k] = &mRK[MBEDTLS_AES_NTH_ORD_MASK_ROUNDS * 4 * k];
+    }
+    for( i=0; i<4; ++i)
+    {
+        // once mRK is part of key schedule, use mRK shares instead
+        for( j=0; j<MBEDTLS_AES_NTH_ORD_MASK_ROUNDS; ++j)
+        {
+            tmp0 = 0;
+            for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
+                tmp1 = lqrng_get32(&LQRNG);
+                mRKs[k][i+4*j] = tmp0 ^ tmp1;
+                tmp0 = tmp1;
+            }
+            RK[i+4*j] ^= tmp0;
+        }
+
+        tmp0 = 0;
+        for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+            tmp1 = lqrng_get32(&LQRNG);
+            t.X[i][k] = tmp0 ^ tmp1;
+            tmp0 = tmp1;
+        }
+        t.X[i][0] ^= tmp0;
+    }
+
+    NEXT_TS();
+
+    // for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+    //     printf("X%d %08x %08x %08x %08x\n", k, t.X[0][k], t.X[1][k], t.X[2][k], t.X[3][k]);
+    // }
+    
+    AES_MASKED_FROUND(t.Y, t.X, RK, mRKs);
+
+    NEXT_TS();
+    // for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+    //     printf("Y%d %08x %08x %08x %08x\n", k, t.Y[0][k], t.Y[1][k], t.Y[2][k], t.Y[3][k]);
+    // }
+
+    AES_MASKED_FINAL_FSUBROUND(t.X[0], RK, mRKs, t.Y[0], t.Y[1], t.Y[2], t.Y[3]);
+    AES_MASKED_FINAL_FSUBROUND(t.X[1], RK, mRKs, t.Y[1], t.Y[2], t.Y[3], t.Y[0]);
+    AES_MASKED_FINAL_FSUBROUND(t.X[2], RK, mRKs, t.Y[2], t.Y[3], t.Y[0], t.Y[1]);
+    AES_MASKED_FINAL_FSUBROUND(t.X[3], RK, mRKs, t.Y[3], t.Y[0], t.Y[1], t.Y[2]);
+
+    NEXT_TS();
+
+    /* Unmask output */
+    for(i=0;i<4;++i) {
+        for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+            t.X[i][0] ^= t.X[i][k];
+        }
+    }
+
+    NEXT_TS();
+    
+    PUT_UINT32_LE( t.X[0][0], output,  0 );
+    PUT_UINT32_LE( t.X[1][0], output,  4 );
+    PUT_UINT32_LE( t.X[2][0], output,  8 );
+    PUT_UINT32_LE( t.X[3][0], output, 12 );
+    
+    NEXT_TS();
+
+    mbedtls_platform_zeroize( &mRK, sizeof( mRK ) );
+    #else
     struct
     {
         uint32_t X[4];
         uint32_t Y[4];
     } t;
-    #ifdef MBEDTLS_AES_2ND_ORD_MASK
-    int j;
-    uint32_t tmp0, tmp1;
-    struct
-    {
-        uint32_t X[4];
-        uint32_t Y[4];
-    } m[2];
-
-    // TODO: mRK should be part of regular key schedule
-    uint32_t mRK[MBEDTLS_AES_2ND_ORD_MASK_ROUNDS * 4 * 2], *mRK1, *mRK2;
-    mRK1 = mRK +  0;
-    mRK2 = mRK + (MBEDTLS_AES_2ND_ORD_MASK_ROUNDS * 4);
-
-    for( i=0; i<4; ++i)
-    {
-        // once mRK is part of key schedule, use mRK shares instead
-        for( j=0; j<MBEDTLS_AES_2ND_ORD_MASK_ROUNDS; ++j)
-        {
-            tmp0 = _lqrng_get32();
-            tmp1 = _lqrng_get32();
-            mRK1[i+4*j] = tmp0;
-            mRK2[i+4*j] = tmp1;
-            RK[4*(j+1)] ^= (tmp0 ^ tmp1);
-        }
-        tmp0 = _lqrng_get32();
-        tmp1 = _lqrng_get32();
-        m[0].X[i] = (*RK++ ^ tmp0);
-        m[1].X[i] = (tmp0 ^ tmp1);
-        GET_UINT32_LE( t.X[i], input,  4*i ); 
-        t.X[i] ^= tmp1;
-    }
-
-    // This impl assumes MBEDTLS_AES_2ND_ORD_MASK_ROUNDS == 2,
-    // TODO: implement MBEDTLS_AES_2ND_ORD_MASK_ROUNDS != 2
-    // printf("mX %08x %08x %08x %08x\n", t.X[0], t.X[1], t.X[2], t.X[3]);
-    // printf("mX %08x %08x %08x %08x\n", m[0].X[0], m[0].X[1], m[0].X[2], m[0].X[3]);
-    // printf("mX %08x %08x %08x %08x\n", m[1].X[0], m[1].X[1], m[1].X[2], m[1].X[3]);
-    
-    AES_MASKED_FROUND(m[0].Y[0], m[0].Y[1], m[0].Y[2], m[0].Y[3],
-                      m[1].Y[0], m[1].Y[1], m[1].Y[2], m[1].Y[3],
-                      t.Y[0],    t.Y[1],    t.Y[2],    t.Y[3],
-                      m[0].X[0], m[0].X[1], m[0].X[2], m[0].X[3],
-                      m[1].X[0], m[1].X[1], m[1].X[2], m[1].X[3],
-                      t.X[0],    t.X[1],    t.X[2],    t.X[3],
-                      RK, mRK1, mRK2);
-    AES_MASKED_FROUND(m[0].X[0], m[0].X[1], m[0].X[2], m[0].X[3],
-                      m[1].X[0], m[1].X[1], m[1].X[2], m[1].X[3],
-                      t.X[0],    t.X[1],    t.X[2],    t.X[3],
-                      m[0].Y[0], m[0].Y[1], m[0].Y[2], m[0].Y[3],
-                      m[1].Y[0], m[1].Y[1], m[1].Y[2], m[1].Y[3],
-                      t.Y[0],    t.Y[1],    t.Y[2],    t.Y[3],
-                      RK, mRK1, mRK2);
-    for(i=0;i<4;++i)
-        t.X[i] ^= m[0].X[i] ^ m[1].X[i];
-
-    for( i = ( ctx->nr >> 1 ) - 2; i > 0; i-- )
-    {
-        // printf("X  %08x %08x %08x %08x\n", t.X[0], t.X[1], t.X[2], t.X[3]);
-        AES_FROUND( t.Y[0], t.Y[1], t.Y[2], t.Y[3], t.X[0], t.X[1], t.X[2], t.X[3] );
-        AES_FROUND( t.X[0], t.X[1], t.X[2], t.X[3], t.Y[0], t.Y[1], t.Y[2], t.Y[3] );
-    }
-
-    mRK1 = mRK +  0;
-    mRK2 = mRK + (MBEDTLS_AES_2ND_ORD_MASK_ROUNDS * 4);
-    for( i=0; i<4; ++i)
-    {
-        // once mRK is part of key schedule, use mRK shares instead
-        for( j=0; j<MBEDTLS_AES_2ND_ORD_MASK_ROUNDS; ++j)
-        {
-            tmp0 = _lqrng_get32();
-            tmp1 = _lqrng_get32();
-            mRK1[i+4*j] = tmp0;
-            mRK2[i+4*j] = tmp1;
-            RK[i+4*j] ^= (tmp0 ^ tmp1);
-        }
-        tmp0 = _lqrng_get32();
-        tmp1 = _lqrng_get32();
-        m[0].X[i] = tmp0;
-        m[1].X[i] = (tmp0 ^ tmp1);
-        t.X[i] ^= tmp1;
-    }
-
-    // printf("mX %08x %08x %08x %08x\n", t.X[0], t.X[1], t.X[2], t.X[3]);
-    // printf("mX %08x %08x %08x %08x\n", m[0].X[0], m[0].X[1], m[0].X[2], m[0].X[3]);
-    // printf("mX %08x %08x %08x %08x\n", m[1].X[0], m[1].X[1], m[1].X[2], m[1].X[3]);
-    
-    AES_MASKED_FROUND(m[0].Y[0], m[0].Y[1], m[0].Y[2], m[0].Y[3],
-                      m[1].Y[0], m[1].Y[1], m[1].Y[2], m[1].Y[3],
-                      t.Y[0],    t.Y[1],    t.Y[2],    t.Y[3],
-                      m[0].X[0], m[0].X[1], m[0].X[2], m[0].X[3],
-                      m[1].X[0], m[1].X[1], m[1].X[2], m[1].X[3],
-                      t.X[0],    t.X[1],    t.X[2],    t.X[3],
-                      RK, mRK1, mRK2);
-
-    // printf("mY %08x %08x %08x %08x\n", t.Y[0], t.Y[1], t.Y[2], t.Y[3]);
-    // printf("mY %08x %08x %08x %08x\n", m[0].Y[0], m[0].Y[1], m[0].Y[2], m[0].Y[3]);
-    // printf("mY %08x %08x %08x %08x\n", m[1].Y[0], m[1].Y[1], m[1].Y[2], m[1].Y[3]);
-
-    AES_MASKED_FINAL_FSUBROUND(t.X[0], m[0].X[0], m[1].X[0],
-                               RK, mRK1, mRK2,
-                               m[0].Y[0], m[0].Y[1], m[0].Y[2], m[0].Y[3],
-                               m[1].Y[0], m[1].Y[1], m[1].Y[2], m[1].Y[3],
-                               t.Y[0],    t.Y[1],    t.Y[2],    t.Y[3]);
-    AES_MASKED_FINAL_FSUBROUND(t.X[1], m[0].X[1], m[1].X[1],
-                               RK, mRK1, mRK2,
-                               m[0].Y[1], m[0].Y[2], m[0].Y[3], m[0].Y[0],
-                               m[1].Y[1], m[1].Y[2], m[1].Y[3], m[1].Y[0],
-                               t.Y[1],    t.Y[2],    t.Y[3],    t.Y[0]);
-    AES_MASKED_FINAL_FSUBROUND(t.X[2], m[0].X[2], m[1].X[2],
-                               RK, mRK1, mRK2,
-                               m[0].Y[2], m[0].Y[3], m[0].Y[0], m[0].Y[1],
-                               m[1].Y[2], m[1].Y[3], m[1].Y[0], m[1].Y[1],
-                               t.Y[2],    t.Y[3],    t.Y[0],    t.Y[1]);
-    AES_MASKED_FINAL_FSUBROUND(t.X[3], m[0].X[3], m[1].X[3],
-                               RK, mRK1, mRK2,
-                               m[0].Y[3], m[0].Y[0], m[0].Y[1], m[0].Y[2],
-                               m[1].Y[3], m[1].Y[0], m[1].Y[1], m[1].Y[2],
-                               t.Y[3],    t.Y[0],    t.Y[1],    t.Y[2]);
-
-    /* Unmask output */
-    for(i=0;i<4;++i)
-        t.X[i] ^= m[0].X[i] ^ m[1].X[i];
-
-    mbedtls_platform_zeroize( &m,   sizeof( m ) );
-    mbedtls_platform_zeroize( &mRK, sizeof( mRK ) );
-    #else
     GET_UINT32_LE( t.X[0], input,  0 ); t.X[0] ^= *RK++;
     GET_UINT32_LE( t.X[1], input,  4 ); t.X[1] ^= *RK++;
     GET_UINT32_LE( t.X[2], input,  8 ); t.X[2] ^= *RK++;
@@ -1249,12 +1504,12 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
             ( (uint32_t) FSb[ ( t.Y[0] >>  8 ) & 0xFF ] <<  8 ) ^
             ( (uint32_t) FSb[ ( t.Y[1] >> 16 ) & 0xFF ] << 16 ) ^
             ( (uint32_t) FSb[ ( t.Y[2] >> 24 ) & 0xFF ] << 24 );
-    #endif
 
     PUT_UINT32_LE( t.X[0], output,  0 );
     PUT_UINT32_LE( t.X[1], output,  4 );
     PUT_UINT32_LE( t.X[2], output,  8 );
     PUT_UINT32_LE( t.X[3], output, 12 );
+    #endif
 
     mbedtls_platform_zeroize( &t, sizeof( t ) );
 
