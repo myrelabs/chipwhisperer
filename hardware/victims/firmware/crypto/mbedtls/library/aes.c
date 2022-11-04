@@ -815,42 +815,15 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 }
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
-#if 0
-#define LQRNG_A 1103515245
-#define LQRNG_C 12345
 
-typedef struct lqrng_state {
-    uint32_t x;
-} lqrng_state;
-
-static inline void lqrng_init(lqrng_state* state, uint32_t seed)
-{
-    state->x = 0xDEADBEEF + seed;
-}
-
-__attribute__((always_inline))
-static inline uint16_t lqrng_get16(lqrng_state* state)
-{
-    state->x *= LQRNG_A;
-    state->x += LQRNG_C;
-    return (state->x >> 12); // bits (28..12]
-}
-
-__attribute__((always_inline))
-static inline uint8_t lqrng_get8(lqrng_state* state)
-{
-    return lqrng_get16(state); // truncated to (20..12]
-}
-
-__attribute__((always_inline))
-static inline uint32_t lqrng_get32(lqrng_state* state)
-{
-    return lqrng_get16(state) | (lqrng_get16(state) << 16);
-}
-
-#undef LQRNG_A
-#undef LQRNG_C
-#else /* lqrng */
+/*
+ * Low quality RNG segment.
+ * The LQRNG is a simple ChaCha state with 12 words dedicated as RNG output
+ * and the remaining 4 dedicated as secret state. The RNG utilizes two round
+ * shuffles for updating the RNG state. The state is initialized with a single
+ * 32-bit seed, but this can be improved by adding entropy (via += preferably)
+ * to the LQRNG->state and calling `lqrng_mix`.
+ */
 #define LQRNG_MAX_IDX 48
 typedef struct lqrng_state {
     union {
@@ -862,7 +835,7 @@ typedef struct lqrng_state {
     int idx;
 } lqrng_state;
 
-static inline void _lqrng_mix(uint32_t* restrict state)
+static inline void lqrng_mix(uint32_t* restrict state, int shuffles)
 {
     #define ROTL(a,b) ((((a) << (b)) | ((a) >> (32 - (b)))) & 0xFFFFFFFF)
     #define QR(a, b, c, d) do {              \
@@ -871,16 +844,18 @@ static inline void _lqrng_mix(uint32_t* restrict state)
         a += b;  d ^= a;  d = ROTL(d, 8);    \
         c += d;  b ^= c;  b = ROTL(b, 7);    \
         } while(0)
-    // Odd round
-    QR(state[0], state[4], state[ 8], state[12]); // column 0
-    QR(state[1], state[5], state[ 9], state[13]); // column 1
-    QR(state[2], state[6], state[10], state[14]); // column 2
-    QR(state[3], state[7], state[11], state[15]); // column 3
-    // Even round
-    QR(state[0], state[5], state[10], state[15]); // diagonal 1 (main diagonal)
-    QR(state[1], state[6], state[11], state[12]); // diagonal 2
-    QR(state[2], state[7], state[ 8], state[13]); // diagonal 3
-    QR(state[3], state[4], state[ 9], state[14]); // diagonal 4
+    for( ; shuffles > 0; --shuffles ) {
+        // Odd round
+        QR(state[0], state[4], state[ 8], state[12]); // column 0
+        QR(state[1], state[5], state[ 9], state[13]); // column 1
+        QR(state[2], state[6], state[10], state[14]); // column 2
+        QR(state[3], state[7], state[11], state[15]); // column 3
+        // Even round
+        QR(state[0], state[5], state[10], state[15]); // diagonal 1 (main diagonal)
+        QR(state[1], state[6], state[11], state[12]); // diagonal 2
+        QR(state[2], state[7], state[ 8], state[13]); // diagonal 3
+        QR(state[3], state[4], state[ 9], state[14]); // diagonal 4
+    }
     #undef QR
     #undef ROTL
 }
@@ -897,20 +872,18 @@ static inline void lqrng_init(lqrng_state* state, uint32_t seed)
     state->state[ 6] = seed;
     state->state[ 7] = seed;
     memset(&state->state[8], 0, 8 * sizeof(uint32_t));
-    _lqrng_mix(state->state);
-    _lqrng_mix(state->state);
-    _lqrng_mix(state->state);
+    lqrng_mix(state->state, 3);
     state->idx = 0;
 }
 
-#define _lqrng_next(state) do { _lqrng_mix(state->state); state->idx = 0; } while(0)
+#define _lqrng_next(ptr) do { lqrng_mix((ptr)->state, 1); (ptr)->idx = 0; } while(0)
 
 __attribute__((always_inline))
 static inline uint32_t lqrng_get32(lqrng_state* state)
 {
     /* Get next u32-aligned idx */
     state->idx = (state->idx + 4) & 0xFFFFFFFC;
-    if(state->idx == LQRNG_MAX_IDX) _lqrng_next(state);
+    if(state->idx >= LQRNG_MAX_IDX) _lqrng_next(state);
     return state->u32_stripe[state->idx / 4];
 }
 
@@ -919,7 +892,7 @@ static inline uint16_t lqrng_get16(lqrng_state* state)
 {
     /* Get next u16-aligned idx */
     state->idx = (state->idx + 2) & 0xFFFFFFFE;
-    if(state->idx == LQRNG_MAX_IDX) _lqrng_next(state);
+    if(state->idx >= LQRNG_MAX_IDX) _lqrng_next(state);
     return state->u16_stripe[state->idx / 2];
 }
 
@@ -928,21 +901,30 @@ static inline uint8_t lqrng_get8(lqrng_state* state)
 {
     /* Get next u8-aligned idx */
     state->idx = (state->idx + 1);
-    if(state->idx == LQRNG_MAX_IDX) _lqrng_next(state);
+    if(state->idx >= LQRNG_MAX_IDX) _lqrng_next(state);
     return state->u8_stripe[state->idx];
 }
 
-#undef LQRNG_MAX_IDX
-#endif /* lqrng */
+#define LQRNG_GETBUF_MAX_SIZE LQRNG_MAX_IDX
+__attribute__((always_inline))
+static inline const uint8_t* lqrng_getbuf(lqrng_state* state, int size)
+{
+    assert(size <= LQRNG_GETBUF_MAX_SIZE);
+    if(state->idx + size > LQRNG_MAX_IDX) _lqrng_next(state);
+    const uint8_t *res = &state->u8_stripe[state->idx];
+    state->idx += size;
+    return res;
+}
+
 
 #define MBEDTLS_AES_GF256_MUL_INLINE __attribute__((always_inline))
 // #define MBEDTLS_AES_GF256_MUL_INLINE
+#define UNROLL_LOOP _Pragma("GCC unroll 16")
+// #define UNROLL_LOOP
 
 // #define MBEDTLS_AES_GF256_MORE_MUL
 // #define MBEDTLS_AES_GF256_BIG_MUL
 #define MBEDTLS_AES_GF256_BIGGER_MUL
-#define UNROLL_LOOP _Pragma("GCC unroll 16")
-// #define UNROLL_LOOP
 
 #if !defined(MBEDTLS_AES_GF256_MORE_MUL) && !defined(MBEDTLS_AES_GF256_BIGGER_MUL)
 /* Lookup higher bits of 8bit x 8bit mul, xor the value to the lower half for a reduced mul*/
@@ -1603,15 +1585,19 @@ static const uint8_t gf256_sqr_lu[256] = {
 
 #define MBEDTLS_AES_AFFINE_LOOKUP 1
 
-#define MASKED_SEC_MULT(Cs,As,Bs) do {    \
+/* Random bytes:
+ * (MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))/2
+ */
+#define MASKED_SEC_MULT_RANDBYTES ((MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))/2)
+#define MASKED_SEC_MULT(Cs,As,Bs,RB) do {    \
     uint8_t $r[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER]; \
     int $x,$y;                                                                  \
+    uint8_t $tmp;                                                               \
     UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
         UNROLL_LOOP for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){   \
-            $r[$x][$y] = lqrng_get8(&LQRNG);                                    \
-            $r[$y][$x] = $r[$x][$y]                                             \
-                       ^ gf256_mul(As[$x], Bs[$y])                              \
-                       ^ gf256_mul(As[$y], Bs[$x]);                             \
+            $tmp = *(RB)++;                                           \
+            $r[$x][$y] = gf256_mul(As[$x], Bs[$y]) ^ $tmp;                      \
+            $r[$y][$x] = gf256_mul(As[$y], Bs[$x]) ^ $tmp;                      \
         }                                                                       \
     }                                                                           \
     UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
@@ -1656,7 +1642,14 @@ static const uint8_t aes_affine[256] = {
 #endif
 
 
-#define MASKED_EXP254(Ys,Xs) do {                                               \
+/* Random bytes:
+ * (4x MASKED_SEC_MULT)
+ * 2*(MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))
+ * + 2*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1)
+ * So max MBEDTLS_AES_NTH_ORD_MASK_ORDER is 5 with the ChaCha-based LQRNG
+ */
+#define MASKED_EXP254_RANDBYTES (4*MASKED_SEC_MULT_RANDBYTES + 2*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))
+#define MASKED_EXP254(Ys,Xs,RB) do {                                            \
     uint8_t $z[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
             $w[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
             $t1, $t2;                                                           \
@@ -1664,41 +1657,54 @@ static const uint8_t aes_affine[256] = {
     /* zi = Xi^2, z = X^2 */                                                    \
     $t1 = 0;                                                                    \
     UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++$x ){       \
-        $t2 = lqrng_get8(&LQRNG);                                               \
+        $t2 = *(RB)++;                                                          \
         $z[$x] = gf256_sqr_lu[Xs[$x]] ^ $t1 ^ $t2;                              \
         $t1 = $t2;                                                              \
     }                                                                           \
     $z[$x] = gf256_sqr_lu[Xs[$x]] ^ $t1;                                        \
     /* Yi = Xi*zi, Y = X^3 */                                                   \
-    MASKED_SEC_MULT(Ys,$z,Xs);                                                  \
+    MASKED_SEC_MULT(Ys,$z,Xs,RB);                                               \
     /* wi = Yi^4, w = X^12 */                                                   \
     $t1 = 0;                                                                    \
     UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++$x ){       \
-        $t2 = lqrng_get8(&LQRNG);                                               \
+        $t2 = *(RB)++;                                                          \
         $w[$x] = gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]] ^ $t1 ^ $t2;                \
         $t1 = $t2;                                                              \
     }                                                                           \
     $w[$x] = gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]] ^ $t1;                          \
     /* Yi = Yi*wi, Y = X^15 */                                                  \
-    MASKED_SEC_MULT(Ys,Ys,$w);                                                  \
+    MASKED_SEC_MULT(Ys,Ys,$w,RB);                                               \
     /* Yi = Yi^16, Y = X^240 */                                                 \
     UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
         Ys[$x] = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]]]];\
     }                                                                           \
     /* Yi = Yi*wi, Y = X^252 */                                                 \
-    MASKED_SEC_MULT(Ys,Ys,$w);                                                  \
+    MASKED_SEC_MULT(Ys,Ys,$w,RB);                                               \
     /* Yi = Yi*zi, Y = X^254 */                                                 \
-    MASKED_SEC_MULT(Ys,Ys,$z);                                                  \
+    MASKED_SEC_MULT(Ys,Ys,$z,RB);                                               \
 } while ( 0 )
 
-#define MASKED_SBOX(Ys,Xs) do {                                                 \
-    int $x;                                                                     \
-    MASKED_EXP254(Ys,Xs);                                                       \
-    UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
-        AES_AFFINE(Ys[$x]);                                                     \
-    }                                                                           \
-    if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { Ys[0] ^= 0x63; }                \
+#if (LQRNG_GETBUF_MAX_SIZE < MASKED_EXP254_RANDBYTES)
+#error  MASKED_EXP254_RANDBYTES is greater than LQRNG_GETBUF_MAX_SIZE, this is currently not supported.
+#endif
+
+static void _masked_sbox_impl(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
+                              uint8_t out[MBEDTLS_AES_NTH_ORD_MASK_ORDER],
+                              const uint8_t in[MBEDTLS_AES_NTH_ORD_MASK_ORDER])
+{
+    int x;
+    const uint8_t *RB = rbs;
+    MASKED_EXP254(out, in, RB);
+    UNROLL_LOOP for( x = 0; x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++x ){
+        AES_AFFINE(out[x]);
+    }
+    if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { out[0] ^= 0x63; }
+}
+
+#define MASKED_SBOX(Ys,Xs) do {                                             \
+    _masked_sbox_impl(lqrng_getbuf(LQRNG,MASKED_EXP254_RANDBYTES),Ys,Xs);   \
 } while ( 0 )
+
 
 #define MC \
     V(00,00,00,00), V(03,01,01,02), V(06,02,02,04), V(05,03,03,06), \
@@ -1919,114 +1925,6 @@ static const uint32_t MC3[256] = { MC };
 
 uint64_t aes_timing_table[32];
 
-void benchy(mbedtls_aes_context *ctx,
-            const unsigned char input[16],
-            unsigned char output[16])
-{
-    lqrng_state LQRNG;
-    uint64_t* tt = aes_timing_table;
-    #define NEXT_TS()  { *(tt++) = __rdtsc(); }
-
-    NEXT_TS(); // 0
-    lqrng_init(&LQRNG, (uint32_t)__rdtsc());
-    NEXT_TS(); // 1
-
-    /* Bench MASKED_SBOX */
-    MASKED_SBOX(output, input);
-    NEXT_TS(); // 2
-
-    /* Expand MASKED_SBOX */
-    do {
-        int $x;
-        MASKED_EXP254(output,input);
-        NEXT_TS(); // 3
-        UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){
-            AES_AFFINE(output[$x]);
-        }
-        if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { output[0] ^= 0x63; }
-    } while ( 0 );
-    NEXT_TS(); // 4
-
-    /* Expand MASKED_EXP254 */
-    do {
-        int $x;
-        do {                                                                            \
-            uint8_t $z[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
-                    $w[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
-                    $t1, $t2;                                                           \
-            int $x;                                                                     \
-            /* zi = Xi^2, z = X^2 */                                                    \
-            $t1 = 0;                                                                    \
-            UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++$x ){       \
-                $t2 = lqrng_get8(&LQRNG);                                               \
-                $z[$x] = gf256_sqr_lu[input[$x]] ^ $t1 ^ $t2;                              \
-                $t1 = $t2;                                                              \
-            }                                                                           \
-            $z[$x] = gf256_sqr_lu[input[$x]] ^ $t1;                                        \
-            NEXT_TS(); // 5
-            /* Yi = Xi*zi, Y = X^3 */                                                   \
-            MASKED_SEC_MULT(output,$z,input);                                                  \
-            NEXT_TS(); // 6
-            /* wi = Yi^4, w = X^12 */                                                   \
-            $t1 = 0;                                                                    \
-            UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++$x ){       \
-                $t2 = lqrng_get8(&LQRNG);                                               \
-                $w[$x] = gf256_sqr_lu[gf256_sqr_lu[output[$x]]] ^ $t1 ^ $t2;                \
-                $t1 = $t2;                                                              \
-            }                                                                           \
-            $w[$x] = gf256_sqr_lu[gf256_sqr_lu[output[$x]]] ^ $t1;                          \
-            NEXT_TS(); // 7
-            /* Yi = Yi*wi, Y = X^15 */                                                  \
-            MASKED_SEC_MULT(output,output,$w);                                                  \
-            NEXT_TS(); // 8
-            /* Yi = Yi^16, Y = X^240 */                                                 \
-            UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
-                output[$x] = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[output[$x]]]]];\
-            }                                                                           \
-            NEXT_TS(); // 9
-            /* Yi = Yi*wi, Y = X^252 */                                                 \
-            MASKED_SEC_MULT(output,output,$w);                                                  \
-            NEXT_TS(); // 10
-            /* Yi = Yi*zi, Y = X^254 */                                                 \
-            MASKED_SEC_MULT(output,output,$z);                                                  \
-        } while ( 0 );
-        NEXT_TS(); // 11
-        UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){
-            AES_AFFINE(output[$x]);
-        }
-        if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { output[0] ^= 0x63; }
-    } while ( 0 );
-    NEXT_TS(); // 12
-
-    /* Bench MASKED_SEC_MULT */
-    do {                                                                            \
-        uint8_t $r[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER]; \
-        int $x,$y;                                                                  \
-        UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
-            UNROLL_LOOP for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){   \
-                $r[$x][$y] = lqrng_get8(&LQRNG);                                    \
-                NEXT_TS(); // 13
-                $r[$y][$x] = $r[$x][$y]                                             \
-                           ^ gf256_mul(input[$x], output[$y])                              \
-                           ^ gf256_mul(input[$y], output[$x]);                             \
-                NEXT_TS(); // 14
-            }                                                                       \
-        }                                                                           \
-        NEXT_TS(); // 15
-        UNROLL_LOOP for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){         \
-            output[$x] = gf256_mul(input[$x], output[$x]);                                     \
-            NEXT_TS(); // 16, 18
-            UNROLL_LOOP for( $y = 0; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y ) {    \
-                if ($y != $x) {                                                     \
-                    output[$x] ^= $r[$x][$y];                                           \
-                }                                                                   \
-            }                                                                       \
-            NEXT_TS(); // 17, 19
-        }                                                                           \
-    } while ( 0 );
-    NEXT_TS(); // 20
-}
-
 /*
  * AES-ECB block encryption
  */
@@ -2035,10 +1933,6 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
                                   const unsigned char input[16],
                                   unsigned char output[16] )
 {
-    #if 0
-    benchy(ctx, input, output); return 0;
-    #endif
-
     int i;
     uint32_t *RK = ctx->rk;
     #ifdef MBEDTLS_AES_NTH_ORD_MASK
@@ -2049,14 +1943,14 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
         uint32_t X[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
         uint32_t Y[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
     } t;
-    lqrng_state LQRNG;
+    lqrng_state sLQRNG, *LQRNG = &sLQRNG;
 
     memset(aes_timing_table, 0, sizeof(aes_timing_table));
     uint64_t* tt = aes_timing_table;
     #define NEXT_TS()  { *(tt++) = __rdtsc(); }
     NEXT_TS();
 
-    lqrng_init(&LQRNG, (uint32_t)__rdtsc());
+    lqrng_init(LQRNG, (uint32_t)__rdtsc());
     
     NEXT_TS();
 
@@ -2085,7 +1979,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
         {
             tmp0 = 0;
             UNROLL_LOOP for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
-                tmp1 = lqrng_get32(&LQRNG);
+                tmp1 = lqrng_get32(LQRNG);
                 mRKs[k][i+4*j] = tmp0 ^ tmp1;
                 tmp0 = tmp1;
             }
@@ -2094,7 +1988,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 
         tmp0 = *(RK++);
         UNROLL_LOOP for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
-            tmp1 = lqrng_get32(&LQRNG);
+            tmp1 = lqrng_get32(LQRNG);
             t.X[i][k] = tmp0 ^ tmp1;
             tmp0 = tmp1;
         }
@@ -2149,7 +2043,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
         {
             tmp0 = 0;
             UNROLL_LOOP for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
-                tmp1 = lqrng_get32(&LQRNG);
+                tmp1 = lqrng_get32(LQRNG);
                 mRKs[k][i+4*j] = tmp0 ^ tmp1;
                 tmp0 = tmp1;
             }
@@ -2158,7 +2052,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 
         tmp0 = 0;
         UNROLL_LOOP for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
-            tmp1 = lqrng_get32(&LQRNG);
+            tmp1 = lqrng_get32(LQRNG);
             t.Y[i][k] = tmp0 ^ tmp1;
             tmp0 = tmp1;
         }
@@ -2204,7 +2098,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
         {
             tmp0 = 0;
             UNROLL_LOOP for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
-                tmp1 = lqrng_get32(&LQRNG);
+                tmp1 = lqrng_get32(LQRNG);
                 mRKs[k][i+4*j] = tmp0 ^ tmp1;
                 tmp0 = tmp1;
             }
@@ -2213,7 +2107,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 
         tmp0 = 0;
         UNROLL_LOOP for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
-            tmp1 = lqrng_get32(&LQRNG);
+            tmp1 = lqrng_get32(LQRNG);
             t.X[i][k] = tmp0 ^ tmp1;
             tmp0 = tmp1;
         }
