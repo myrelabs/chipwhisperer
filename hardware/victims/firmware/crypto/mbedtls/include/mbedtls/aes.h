@@ -83,7 +83,7 @@
 #endif /* force_inline */
 
 // TODO: move to config
-#define MBEDTLS_AES_NTH_ORD_MASK
+// #define MBEDTLS_AES_NTH_ORD_MASK
 // #define MBEDTLS_AES_NTH_ORD_MASK_ORDER  2
 // #define MBEDTLS_AES_NTH_ORD_MASK_ROUNDS 2
 // #define MBEDTLS_AES_AFFINE_LOOKUP

@@ -270,11 +270,20 @@ void aes_indep_init(void)
 	#ifdef AES_DECRYPT
 	mbedtls_aes_init(&dec_ctx);
 	#endif
+    
+    #if defined(MBEDTLS_AES_NTH_ORD_MASK)
+    mbedtls_aes_mask_enable(&enc_ctx, NULL, 0);
+    #ifdef AES_DECRYPT
+    mbedtls_aes_mask_enable(&dec_ctx, NULL, 0);
+    #endif
+    #endif
 }
 
 void aes_indep_enc_pretrigger(uint8_t * pt)
 {
-    ;
+    #if defined(MBEDTLS_AES_NTH_ORD_MASK)
+    mbedtls_aes_maskkey(&enc_ctx);
+    #endif
 }
 
 void aes_indep_enc_posttrigger(uint8_t * pt)
@@ -298,7 +307,9 @@ void aes_indep_enc(uint8_t * pt)
 #ifdef AES_DECRYPT
 void aes_indep_dec_pretrigger(uint8_t * ct)
 {
-    ;
+    #if defined(MBEDTLS_AES_NTH_ORD_MASK)
+    mbedtls_aes_maskkey(&dec_ctx);
+    #endif
 }
 
 void aes_indep_dec_posttrigger(uint8_t * ct)
@@ -314,6 +325,12 @@ void aes_indep_dec(uint8_t * ct)
 
 void aes_indep_mask(uint8_t * m, uint8_t len)
 {
+    #if defined(MBEDTLS_AES_NTH_ORD_MASK)
+    mbedtls_aes_mask_enable(&enc_ctx, m, len);
+    #ifdef AES_DECRYPT
+    mbedtls_aes_mask_enable(&dec_ctx, m, len);
+    #endif
+    #endif
 }
 
 #elif defined(WOLFSSL)

@@ -15,6 +15,12 @@ ifeq ($(CRYPTO_OPTIONS),AES128C)
  else
  CDEFS += -DMBEDTLS_AES_ROM_TABLES=$(MBEDTLS_AES_ROM_TABLES)
  endif
+ 
+ ifeq ($(MBEDTLS_AES_NTH_ORD_MASK),)
+ else
+ CDEFS += -DMBEDTLS_AES_NTH_ORD_MASK=$(MBEDTLS_AES_NTH_ORD_MASK)
+ SRC += gf256.c
+ endif
 
 else ifeq ($(CRYPTO_OPTIONS),CHACHA)
  SRC += chacha-independant.c
