@@ -53,9 +53,10 @@
 #define MBEDTLS_AES_ENCRYPT     1 /**< AES encryption. */
 #define MBEDTLS_AES_DECRYPT     0 /**< AES decryption. */
 
-/* Error codes in range 0x0020-0x0022 */
+/* Error codes in range 0x0020-0x0024 */
 #define MBEDTLS_ERR_AES_INVALID_KEY_LENGTH                -0x0020  /**< Invalid key length. */
 #define MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH              -0x0022  /**< Invalid data input length. */
+#define MBEDTLS_ERR_AES_INVALID_CONTEXT                   -0x0024  /**< Invalid aes context. */
 
 /* Error codes in range 0x0021-0x0025 */
 #define MBEDTLS_ERR_AES_BAD_INPUT_DATA                    -0x0021  /**< Invalid input data. */
@@ -70,6 +71,41 @@
     !defined(inline) && !defined(__cplusplus)
 #define inline __inline
 #endif
+
+#if !defined(force_inline)
+#ifdef __GNUC__
+#define force_inline inline __attribute__((always_inline))
+#elif defined(__ARMCC_VERSION)
+#define force_inline __forceinline
+#else
+#define force_inline inline
+#endif
+#endif /* force_inline */
+
+// TODO: move to config
+#define MBEDTLS_AES_NTH_ORD_MASK
+// #define MBEDTLS_AES_NTH_ORD_MASK_ORDER  2
+// #define MBEDTLS_AES_NTH_ORD_MASK_ROUNDS 2
+// #define MBEDTLS_AES_AFFINE_LOOKUP
+// #define MBEDTLS_AES_MIXCOL_TABLES
+// #define MBEDTLS_AES_GF256_FORCE_INLINE
+// #define MBEDTLS_AES_COMMON_MASK
+// #define MBEDTLS_AES_STRICT_REFRESH_MASK
+
+
+#if defined(MBEDTLS_AES_NTH_ORD_MASK)
+#include "lqrng.h"
+
+#if !defined(MBEDTLS_AES_NTH_ORD_MASK_ORDER)
+#define MBEDTLS_AES_NTH_ORD_MASK_ORDER  2
+#endif /* MBEDTLS_AES_NTH_ORD_MASK_ORDER */
+
+#if !defined(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS)
+#define MBEDTLS_AES_NTH_ORD_MASK_ROUNDS 2
+#endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS */
+
+#endif /* MBEDTLS_AES_NTH_ORD_MASK */
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -94,6 +130,20 @@ typedef struct mbedtls_aes_context
                                      <li>Simplifying key expansion in the 256-bit
                                          case by generating an extra round key.
                                          </li></ul> */
+    #if defined(MBEDTLS_AES_NTH_ORD_MASK)
+    int masked;                 /*!< Masked enabled for this context. */
+    uint32_t mrk[               /*!< Masked round key buffer. */
+    #if MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0
+        (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS+1)
+        *2
+    #else /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS */
+        15
+    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS */
+        *4
+        *(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1)
+    ];
+    mbedtls_lqrng_state lqrng;
+    #endif /* MBEDTLS_AES_NTH_ORD_MASK */
 }
 mbedtls_aes_context;
 
@@ -189,6 +239,30 @@ int mbedtls_aes_setkey_enc( mbedtls_aes_context *ctx, const unsigned char *key,
  */
 int mbedtls_aes_setkey_dec( mbedtls_aes_context *ctx, const unsigned char *key,
                     unsigned int keybits );
+
+#if defined(MBEDTLS_AES_NTH_ORD_MASK)
+/**
+ * \brief          This function (re-)masks encryption/decryption key.
+ * 
+ * \param ctx      The AES context with set key.
+ * \return         \c 0 on success.
+ * \return         #MBEDTLS_ERR_AES_INVALID_CONTEXT if ctx doesn't have masking enabled.
+ */
+int mbedtls_aes_maskkey( mbedtls_aes_context *ctx );
+
+/**
+ * \brief          This function enables masked operation for the context,
+ *                 initializes lqrng with given seed.
+ * 
+ * \param ctx      The AES context.
+ * \param seed     LQRNG seed (up to 48 bytes).
+ * \param seedlen  Length of seed, in bytes.
+ * \return         \c 0 on success.
+ */
+int mbedtls_aes_mask_enable( mbedtls_aes_context *ctx,
+                             const unsigned char *seed,
+                             unsigned int seedlen );
+#endif
 
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
 /**

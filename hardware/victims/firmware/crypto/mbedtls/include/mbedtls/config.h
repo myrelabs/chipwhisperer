@@ -583,7 +583,7 @@
  * This option is independent of \c MBEDTLS_AES_FEWER_TABLES.
  *
  */
-#define MBEDTLS_AES_ROM_TABLES
+// #define MBEDTLS_AES_ROM_TABLES
 
 /**
  * \def MBEDTLS_AES_FEWER_TABLES
@@ -605,7 +605,7 @@
  * This option is independent of \c MBEDTLS_AES_ROM_TABLES.
  *
  */
-#define MBEDTLS_AES_FEWER_TABLES
+// #define MBEDTLS_AES_FEWER_TABLES
 
 /**
  * \def MBEDTLS_CAMELLIA_SMALL_MEMORY
