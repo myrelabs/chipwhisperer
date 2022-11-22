@@ -112,11 +112,16 @@ static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
     state->sc[ 1] = sc[1];
     state->sc[ 2] = sc[2];
     state->sc[ 3] = sc[3];
-    // Fill the remainder with seed
-    for( rem = 48; rem > 0; rem -= seed_len ){
-        chk = (seed_len < rem) ? seed_len : rem;
-        memcpy(dst, seed, chk);
-        dst += chk;
+    if(!seed_len) {
+        memset(dst, 0, 48);
+    }
+    else {
+        // Fill the remainder with seed
+        for( rem = 48; rem > 0; rem -= seed_len ){
+            chk = (seed_len < rem) ? seed_len : rem;
+            memcpy(dst, seed, chk);
+            dst += chk;
+        }
     }
     mbedtls_lqrng_mix(state, 4);
     state->idx = 0;
@@ -207,11 +212,16 @@ static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
     int rem, chk;
     uint8_t *dst = (uint8_t*)&state->x[1];
     state->x[0] = 0xf1ea5eed;
-    // Fill the remainder with seed
-    for( rem = 3*sizeof(uint32_t); rem > 0; rem -= seed_len ){
-        chk = (seed_len < rem) ? seed_len : rem;
-        memcpy(dst, seed, chk);
-        dst += chk;
+    if(!seed_len) {
+        memset(dst, 0, 3*sizeof(uint32_t));
+    }
+    else {
+        // Fill the remainder with seed
+        for( rem = 3*sizeof(uint32_t); rem > 0; rem -= seed_len ){
+            chk = (seed_len < rem) ? seed_len : rem;
+            memcpy(dst, seed, chk);
+            dst += chk;
+        }
     }
     for( rem = 20; rem > 0; --rem) {
         (void)mbedtls_lqrng_get32(state);

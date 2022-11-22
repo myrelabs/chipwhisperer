@@ -609,11 +609,34 @@ static const uint32_t IMC3[256] = { IMC };
 
 #else /* MBEDTLS_AES_ROM_TABLES */
 
+#if defined(MBEDTLS_AES_CCM_TABLES)
+#define FAST_TABLE __attribute__((section (".ccm")))
+#else
+#define FAST_TABLE
+#endif /* MBEDTLS_AES_CCM_TABLES */
+
+/* Each FTx, RTx, MCx, IMCx occupies 1KiB.
+ * Putting all of them in CCM would require 8KiB for unmasked and 16KiB for masked impl.
+ * Therefore only FT0 is put into CCM and only if MBEDTLS_AES_FEWER_TABLES is present. */
+#if defined(MBEDTLS_AES_FEWER_TABLES)
+#define FAST_TABLE_xT0 FAST_TABLE 
+/* If **not** using MBEDTLS_AES_MIXCOL_TABLES it makes sense to also speed up FSb and RSb since
+ * MC0[x] = FT0[RSb[x]]; otherwise FSb/RSb is only used in the final round in non-masked implementation. */
+#if !defined(MBEDTLS_AES_MIXCOL_TABLES)
+#define FAST_TABLE_xSb FAST_TABLE
+#else
+#define FAST_TABLE_xSb
+#endif
+#else  /* MBEDTLS_AES_FEWER_TABLES */
+#define FAST_TABLE_xT0
+#define FAST_TABLE_xSb
+#endif /* MBEDTLS_AES_FEWER_TABLES */
+
 /*
  * Forward S-box & tables
  */
-static unsigned char FSb[256];
-static uint32_t FT0[256];
+static unsigned char FSb[256] FAST_TABLE_xSb;
+static uint32_t FT0[256]      FAST_TABLE_xT0;
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
 static uint32_t FT1[256];
 static uint32_t FT2[256];
@@ -623,8 +646,8 @@ static uint32_t FT3[256];
 /*
  * Reverse S-box & tables
  */
-static unsigned char RSb[256];
-static uint32_t RT0[256];
+static unsigned char RSb[256] FAST_TABLE_xSb;
+static uint32_t RT0[256]      FAST_TABLE_xT0;
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
 static uint32_t RT1[256];
 static uint32_t RT2[256];
@@ -646,14 +669,14 @@ static uint8_t aes_iaffine[256];
 #endif /* MBEDTLS_AES_AFFINE_LOOKUP */
 
 #if defined(MBEDTLS_AES_MIXCOL_TABLES)
-static uint32_t MC0[256];
+static uint32_t MC0[256] FAST_TABLE_MC0;
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
 static uint32_t MC1[256];
 static uint32_t MC2[256];
 static uint32_t MC3[256];
 #endif /* !MBEDTLS_AES_FEWER_TABLES */
 
-static uint32_t IMC0[256];
+static uint32_t IMC0[256] FAST_TABLE_MC0;
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
 static uint32_t IMC1[256];
 static uint32_t IMC2[256];

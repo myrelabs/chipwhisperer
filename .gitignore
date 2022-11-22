@@ -54,6 +54,8 @@ hardware/victims/firmware/*/*.hex
 hardware/victims/firmware/*/*.lss
 hardware/victims/firmware/*/*.map
 hardware/victims/firmware/*/*.sym
+hardware/victims/firmware/**/*.su
+hardware/victims/firmware/**/*.cgraph
 !hardware/victims/firmware/hal/**
 !hardware/victims/firmware/87c51/**
 hardware/victims/firmware/simpleserial-base-lab*
