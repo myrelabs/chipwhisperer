@@ -35,6 +35,9 @@
 #define MBEDTLS_AES_LQRNG_IMPL_ICHACHA6     3
 #define MBEDTLS_AES_LQRNG_IMPL_ICHACHA8     4
 #define MBEDTLS_AES_LQRNG_IMPL_JSF32       10
+#define MBEDTLS_AES_LQRNG_IMPL_CHACHA4     22
+#define MBEDTLS_AES_LQRNG_IMPL_CHACHA6     23
+#define MBEDTLS_AES_LQRNG_IMPL_CHACHA8     24
 
 #if !defined(MBEDTLS_AES_LQRNG_IMPL)
 #define MBEDTLS_AES_LQRNG_IMPL MBEDTLS_AES_LQRNG_IMPL_ICHACHA4
@@ -44,9 +47,35 @@
 extern "C" {
 #endif
 
-#if (   (MBEDTLS_AES_LQRNG_IMPL >= MBEDTLS_AES_LQRNG_IMPL_ICHACHA2) \
-     && (MBEDTLS_AES_LQRNG_IMPL <= MBEDTLS_AES_LQRNG_IMPL_ICHACHA8) )
+#if (   (MBEDTLS_AES_LQRNG_IMPL >= MBEDTLS_AES_LQRNG_IMPL_ICHACHA2)   \
+     && (MBEDTLS_AES_LQRNG_IMPL <= MBEDTLS_AES_LQRNG_IMPL_ICHACHA8) ) \
+ || (   (MBEDTLS_AES_LQRNG_IMPL >= MBEDTLS_AES_LQRNG_IMPL_CHACHA4)    \
+     && (MBEDTLS_AES_LQRNG_IMPL <= MBEDTLS_AES_LQRNG_IMPL_CHACHA8) )
 
+#if (MBEDTLS_AES_LQRNG_IMPL >= MBEDTLS_AES_LQRNG_IMPL_CHACHA4)
+#define MBEDTLS_AES_LQRNG_FULL_CHACHA
+#endif
+
+#if defined(MBEDTLS_AES_LQRNG_FULL_CHACHA)
+#define MBEDTLS_LQRNG_SHUFFLES (MBEDTLS_AES_LQRNG_IMPL - MBEDTLS_AES_LQRNG_IMPL_CHACHA4 + 2)
+
+/*
+ * This LQRNG is a full ChaChaX implementation
+ */
+#define MBEDTLS_LQRNG_IDX_MAX 64
+typedef struct mbedtls_lqrng_state {
+    union {
+        uint32_t state[16];
+        uint32_t u32_stripe[16];
+        uint8_t  u8_stripe [64];
+    };
+    union {
+        uint32_t sc[4];
+        uint32_t seed[16];
+    };
+    int idx; /*!< Indexes u8_stripe, must be pre-aligned (to next) when used to access u32 stripe */
+} mbedtls_lqrng_state;
+#else  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
 #define MBEDTLS_LQRNG_SHUFFLES (MBEDTLS_AES_LQRNG_IMPL - MBEDTLS_AES_LQRNG_IMPL_ICHACHA2 + 1)
 
 /*
@@ -68,6 +97,8 @@ typedef struct mbedtls_lqrng_state {
     };
     int idx; /*!< Indexes u8_stripe, must be pre-aligned (to next) when used to access u32 stripe */
 } mbedtls_lqrng_state;
+#endif /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
+
 
 /**
  * \brief Perform 2* `shuffles` ChaCha rounds on the internal state.
@@ -77,6 +108,13 @@ typedef struct mbedtls_lqrng_state {
  */
 static inline void mbedtls_lqrng_mix(mbedtls_lqrng_state* state, int shuffles)
 {
+    #if defined(MBEDTLS_AES_LQRNG_FULL_CHACHA)
+    int x;
+    /* Increment counter and then copy initial state to state buffer */
+    state->seed[12]++;
+    for( x = 0; x < 16; ++x )
+        state->state[x] = state->seed[x];
+    #endif
     #define MBEDTLS_LQRNG_ROTL(a,b) ((((a) << (b)) | ((a) >> (32 - (b)))) & 0xFFFFFFFF)
     #define MBEDTLS_LQRNG_QR(a, b, c, d) do {              \
         a += b;  d ^= a;  d = MBEDTLS_LQRNG_ROTL(d,16);    \
@@ -98,14 +136,24 @@ static inline void mbedtls_lqrng_mix(mbedtls_lqrng_state* state, int shuffles)
     }
     #undef MBEDTLS_LQRNG_QR
     #undef MBEDTLS_LQRNG_ROTL
+    #if defined(MBEDTLS_AES_LQRNG_FULL_CHACHA)
+    for( x = 0; x < 16; ++x )
+        state->state[x] += state->seed[x];
+    #endif
 }
+
+#define _mbedtls_lqrng_next(ptr) do { mbedtls_lqrng_mix((ptr), MBEDTLS_LQRNG_SHUFFLES); (ptr)->idx = 0; } while(0)
 
 static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
                                       const uint8_t *seed,
                                       int seed_len)
 {
     static const uint32_t sc[4] = { 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574 };
+    #if defined(MBEDTLS_AES_LQRNG_FULL_CHACHA)
+    uint8_t *dst = (uint8_t*)&state->seed[4];
+    #else  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
     uint8_t *dst = state->u8_stripe;
+    #endif /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
     int rem, chk;
 
     state->sc[ 0] = sc[0];
@@ -123,11 +171,13 @@ static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
             dst += chk;
         }
     }
+    #if defined(MBEDTLS_AES_LQRNG_FULL_CHACHA)
+    _mbedtls_lqrng_next(state);
+    #else  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
     mbedtls_lqrng_mix(state, 4);
     state->idx = 0;
+    #endif  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
 }
-
-#define _mbedtls_lqrng_next(ptr) do { mbedtls_lqrng_mix((ptr), MBEDTLS_LQRNG_SHUFFLES); (ptr)->idx = 0; } while(0)
 
 static force_inline
 uint32_t mbedtls_lqrng_get32(mbedtls_lqrng_state* state)

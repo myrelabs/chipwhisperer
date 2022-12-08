@@ -94,11 +94,10 @@ static MBEDTLS_GF256_INLINE uint8_t gf256_mul(uint8_t a, uint8_t b)
     int e, m;
     e = gf256_log3_lu[a] + gf256_log3_lu[b]; 
     /* Get the antilog (exp) */
-	s = gf256_exp3_lu[e];
-	m  = (int)(a) - 1;
+    s = gf256_exp3_lu[e];
+    m  = (int)(a) - 1;
     m |= (int)(b) - 1;
-    m >>= 8;
-    return s & ~m;
+    return s & ~(m >> 8); /* On ARM this can be done in one instruction: bic [s], [m], asr #8 */
 }
 
 #else /* MBEDTLS_AES_GF256_IMPL_LU_4x8 || MBEDTLS_AES_GF256_IMPL_LU_4x8x2 */

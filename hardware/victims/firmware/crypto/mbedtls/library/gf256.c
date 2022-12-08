@@ -691,12 +691,6 @@ const uint8_t gf256_sqr_lu[256] = {
 
 #else /* MBEDTLS_AES_ROM_TABLES */
 
-#if defined(MBEDTLS_AES_CCM_TABLES)
-#define FAST_TABLE __attribute__((section (".ccm")))
-#else
-#define FAST_TABLE
-#endif
-
 #ifdef MBEDTLS_HAVE_GF256_RED_LU
 uint8_t gf256_red_lu[128];
 #endif
@@ -710,10 +704,10 @@ uint8_t gf256_mul_lu_4x4_lh[256];
 uint8_t gf256_mul_lu_4x4_hh[256];
 #endif
 #ifdef MBEDTLS_HAVE_GF256_LOG3_LU
-uint8_t gf256_log3_lu[256] FAST_TABLE;
+uint8_t gf256_log3_lu[256];
 #endif
 #ifdef MBEDTLS_HAVE_GF256_EXP3_LU
-uint8_t gf256_exp3_lu[2*255] FAST_TABLE;
+uint8_t gf256_exp3_lu[2*255];
 #endif
 #ifdef MBEDTLS_HAVE_GF256_MUL_LU_4x8_L
 uint8_t gf256_mul_lu_4x8_l[256*16];
@@ -722,7 +716,7 @@ uint8_t gf256_mul_lu_4x8_l[256*16];
 uint8_t gf256_mul_lu_4x8_h[256*16];
 #endif
 #ifdef MBEDTLS_HAVE_GF256_SQR_LU
-uint8_t gf256_sqr_lu[256] FAST_TABLE;
+uint8_t gf256_sqr_lu[256];
 #endif
 
 void gf256_gen_tables(int pow[255], int log[256])
