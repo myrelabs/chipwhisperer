@@ -58,6 +58,18 @@ else ifeq ($(CRYPTO_TARGET),MBEDTLS)
 #
   include $(FIRMWAREPATH)/crypto/Makefile.mbedtls
 
+
+else ifeq ($(CRYPTO_TARGET),MBEDTLS-CUSTOM-CURVES)
+#
+# Crypto Target: MBEDTLS-CUSTOM-CURVES
+# Crypto Options:
+#    AES128 = AES128
+#    SHA1 
+# Notes:
+#
+  include $(FIRMWAREPATH)/crypto/Makefile.mbedtls-custom-curves
+
+
 else ifeq ($(CRYPTO_TARGET),WOLFSSL)
 #
 # Crypto Target: WOLFSSL
