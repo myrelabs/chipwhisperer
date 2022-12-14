@@ -38,7 +38,7 @@ SRC += comb-full-recode-experiments.c comb-full-recode-experiments-arm.c
 
 # -----------------------------------------------------------------------------
 
-CRYPTO_TARGET = MBEDTLS-CUSTOM-CURVES
+CRYPTO_TARGET = MBEDTLSCUSTOMCURVES
 CRYPTO_OPTIONS = ECDSA
 
 #Add simpleserial project to build

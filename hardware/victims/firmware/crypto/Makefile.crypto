@@ -59,9 +59,9 @@ else ifeq ($(CRYPTO_TARGET),MBEDTLS)
   include $(FIRMWAREPATH)/crypto/Makefile.mbedtls
 
 
-else ifeq ($(CRYPTO_TARGET),MBEDTLS-CUSTOM-CURVES)
+else ifeq ($(CRYPTO_TARGET),MBEDTLSCUSTOMCURVES)
 #
-# Crypto Target: MBEDTLS-CUSTOM-CURVES
+# Crypto Target: MBEDTLSCUSTOMCURVES
 # Crypto Options:
 #    AES128 = AES128
 #    SHA1 
