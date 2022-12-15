@@ -52,19 +52,19 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Highest address of the user mode stack */
-_estack = 0x2000A000;    /* end of RAM */
-
 _Min_Heap_Size = 0;      /* required amount of heap  */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
 /* Memories definition */
 MEMORY
 {
-  RAM (xrw)		: ORIGIN = 0x20000000, LENGTH = 40K
+  RAM (xrw)	  : ORIGIN = 0x20000000, LENGTH = 40K
   CCM (xrw)   : ORIGIN = 0x10000000, LENGTH = 8K
-  ROM (rx)		: ORIGIN =  0x8000000, LENGTH = 256K
+  ROM (rx)	  : ORIGIN =  0x8000000, LENGTH = 256K
 }
+
+/* Highest address of the user mode stack */
+_estack = ORIGIN(RAM) + LENGTH(RAM); /* end of RAM */
 
 /* Sections */
 SECTIONS
@@ -161,10 +161,26 @@ SECTIONS
     _edata = .;        /* define a global symbol at data end */
   } >RAM AT> ROM
 
+  /* Used by the startup to initialize ccm */
+  _siccm = LOADADDR(.ccm);
+
+  /* Explicit CCM data into CCM section */
+  .ccm :
+  {
+    . = ALIGN(4);
+    _sccm = .;         /* define a global symbol at ccm start */
+
+    *(.ccm)
+    *(.ccm*)
+
+    . = ALIGN(4);
+    _eccm = .;         /* define a global symbol at ccm end */
+  } >CCM AT> ROM
+
   /* Uninitialized data section into RAM memory */
-  . = ALIGN(4);
   .bss :
   {
+    . = ALIGN(4);
     /* This is used by the startup in order to initialize the .bss secion */
     _sbss = .;         /* define a global symbol at bss start */
     __bss_start__ = _sbss;
@@ -187,18 +203,6 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
-
-  /* Explicit CCM data into CCM section */
-  .ccm :
-  {
-    _sccm = .;         /* define a global symbol at ccm start */
-    __ccm_start__ = _sccm;
-    *(.ccm)
-    *(.ccm*)
-    . = ALIGN(4);
-    _eccm = .;         /* define a global symbol at ccm end */
-    __ccm_end__ = _eccm;
-  } >CCM
   
   
 

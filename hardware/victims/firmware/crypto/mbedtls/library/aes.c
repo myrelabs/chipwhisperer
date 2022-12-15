@@ -22,12 +22,14 @@
  *  http://csrc.nist.gov/encryption/aes/rijndael/Rijndael.pdf
  *  http://csrc.nist.gov/publications/fips/fips197/fips-197.pdf
  */
+/*
 #ifdef __x86_64__
 #include <x86intrin.h>
 #else
 #include <stm32f3xx.h>
 #define __rdtsc() (DWT->CYCCNT)
 #endif
+*/
 
 #include "common.h"
 
@@ -1797,13 +1799,13 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 #define DEBUG_STATE_PRINT(TAS)
 #endif
 
-uint64_t aes_timing_table[32];
-#define TIMING_INSTR_INIT() \
-    memset(aes_timing_table, 0, sizeof(aes_timing_table)); \
-    uint64_t* tt = aes_timing_table;
-// #define TIMING_INSTR_INIT() {}
-#define TIMING_INSTR_EDGE() { *(tt++) = __rdtsc(); }
-// #define TIMING_INSTR_EDGE() { }
+// extern uint64_t aes_timing_table[32];
+// #define TIMING_INSTR_INIT() \
+//     uint64_t* tt = aes_timing_table; \
+//     memset(aes_timing_table, 0, sizeof(aes_timing_table));
+#define TIMING_INSTR_INIT() {}
+// #define TIMING_INSTR_EDGE() { *(tt++) = __rdtsc(); }
+#define TIMING_INSTR_EDGE() { }
 // #define TIMING_INSTR_NEXT() { *(tt++) = __rdtsc(); }
 #define TIMING_INSTR_NEXT() { }
 

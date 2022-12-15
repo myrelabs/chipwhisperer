@@ -18,6 +18,7 @@
 
 #include "aes-independant.h"
 #include "hal.h"
+#include <stm32f3xx.h>
 #include "simpleserial.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -50,6 +51,13 @@ uint8_t get_pt(uint8_t* pt, uint8_t len)
     aes_indep_enc_posttrigger(pt);
 
 	simpleserial_put('r', 16, pt);
+	return 0x00;
+}
+
+uint64_t aes_timing_table[32];
+uint8_t get_times(uint8_t* x, uint8_t len)
+{
+    simpleserial_put('r', sizeof(aes_timing_table) - sizeof(uint64_t) /* last one must be 0 */, (uint8_t*)(aes_timing_table));
 	return 0x00;
 }
 
@@ -150,6 +158,10 @@ int main(void)
     // putch('l');
     // putch('o');
     // putch('\n');
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    ITM->LAR = 0xC5ACCE55;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
 	simpleserial_init();
     #if SS_VER == SS_VER_2_1
@@ -157,6 +169,7 @@ int main(void)
     #else
     simpleserial_addcmd('k', 16, get_key);
     simpleserial_addcmd('p', 16,  get_pt);
+    simpleserial_addcmd('t', 0, get_times);
     simpleserial_addcmd('x',  0,   reset);
     simpleserial_addcmd_flags('m', 18, get_mask, CMD_FLAG_LEN);
     simpleserial_addcmd('s', 2, enc_multi_setnum);
