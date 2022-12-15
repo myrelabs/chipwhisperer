@@ -1236,7 +1236,9 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 
 #define AES_AFFINE(X)  do { X = aes_affine[X];  } while(0)
 #define AES_IAFFINE(X) do { X = aes_iaffine[X]; } while(0)
-#else
+
+#else /* MBEDTLS_AES_AFFINE_LOOKUP */
+
 #define AES_AFFINE(X)  do {                             \
     uint8_t $t;                                         \
     $t = X;  $t = ( ( $t << 1 ) | ( $t >> 7 ) ) & 0xFF; \
@@ -1252,7 +1254,8 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
     X ^= $t; $t = ( ( $t << 3 ) | ( $t >> 5 ) ) & 0xFF; \
     X ^= $t ^ 0x05;                                     \
 } while ( 0 )
-#endif
+
+#endif /* MBEDTLS_AES_AFFINE_LOOKUP */
 
 /* Original RefreshMask from https://eprint.iacr.org/2010/441.pdf,
  *   Strict RefreshMask from https://eprint.iacr.org/2016/572.pdf,

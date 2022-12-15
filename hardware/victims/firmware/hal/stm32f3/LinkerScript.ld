@@ -169,9 +169,8 @@ SECTIONS
   {
     . = ALIGN(4);
     _sccm = .;         /* define a global symbol at ccm start */
-
-    *(.ccm)
-    *(.ccm*)
+    *(.ccm)            /* .ccm sections */
+    *(.ccm*)           /* .ccm* sections */
 
     . = ALIGN(4);
     _eccm = .;         /* define a global symbol at ccm end */

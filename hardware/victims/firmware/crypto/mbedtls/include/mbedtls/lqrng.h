@@ -77,6 +77,7 @@ typedef struct mbedtls_lqrng_state {
 } mbedtls_lqrng_state;
 #else  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
 #define MBEDTLS_LQRNG_SHUFFLES (MBEDTLS_AES_LQRNG_IMPL - MBEDTLS_AES_LQRNG_IMPL_ICHACHA2 + 1)
+#define MBEDTLS_LQRNG_INIT_SHUFFLES 20
 
 /*
  * This LQRNG consists of a ChaCha state in which the first 4 words are reserved and "hidden"
@@ -124,15 +125,15 @@ static inline void mbedtls_lqrng_mix(mbedtls_lqrng_state* state, int shuffles)
         } while(0)
     for( ; shuffles > 0; --shuffles ) {
         // Odd round
-        MBEDTLS_LQRNG_QR(state->state[0], state->state[4], state->state[ 8], state->state[12]); // column 0
-        MBEDTLS_LQRNG_QR(state->state[1], state->state[5], state->state[ 9], state->state[13]); // column 1
-        MBEDTLS_LQRNG_QR(state->state[2], state->state[6], state->state[10], state->state[14]); // column 2
-        MBEDTLS_LQRNG_QR(state->state[3], state->state[7], state->state[11], state->state[15]); // column 3
+        MBEDTLS_LQRNG_QR(state->state[0], state->state[4], state->state[ 8], state->state[12]);
+        MBEDTLS_LQRNG_QR(state->state[1], state->state[5], state->state[ 9], state->state[13]);
+        MBEDTLS_LQRNG_QR(state->state[2], state->state[6], state->state[10], state->state[14]);
+        MBEDTLS_LQRNG_QR(state->state[3], state->state[7], state->state[11], state->state[15]);
         // Even round
-        MBEDTLS_LQRNG_QR(state->state[0], state->state[5], state->state[10], state->state[15]); // diagonal 1
-        MBEDTLS_LQRNG_QR(state->state[1], state->state[6], state->state[11], state->state[12]); // diagonal 2
-        MBEDTLS_LQRNG_QR(state->state[2], state->state[7], state->state[ 8], state->state[13]); // diagonal 3
-        MBEDTLS_LQRNG_QR(state->state[3], state->state[4], state->state[ 9], state->state[14]); // diagonal 4
+        MBEDTLS_LQRNG_QR(state->state[0], state->state[5], state->state[10], state->state[15]);
+        MBEDTLS_LQRNG_QR(state->state[1], state->state[6], state->state[11], state->state[12]);
+        MBEDTLS_LQRNG_QR(state->state[2], state->state[7], state->state[ 8], state->state[13]);
+        MBEDTLS_LQRNG_QR(state->state[3], state->state[4], state->state[ 9], state->state[14]);
     }
     #undef MBEDTLS_LQRNG_QR
     #undef MBEDTLS_LQRNG_ROTL
@@ -174,7 +175,7 @@ static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
     #if defined(MBEDTLS_AES_LQRNG_FULL_CHACHA)
     _mbedtls_lqrng_next(state);
     #else  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
-    mbedtls_lqrng_mix(state, 4);
+    mbedtls_lqrng_mix(state, MBEDTLS_LQRNG_INIT_SHUFFLES);
     state->idx = 0;
     #endif  /* MBEDTLS_AES_LQRNG_FULL_CHACHA */
 }
@@ -246,11 +247,11 @@ static force_inline
 uint32_t mbedtls_lqrng_get32(mbedtls_lqrng_state* state)
 {
     #define MBEDTLS_LQRNG_ROTL(a,b) ((((a) << (b)) | ((a) >> (32 - (b)))) & 0xFFFFFFFF)
-    uint32_t state_x5 = state->x[0] - MBEDTLS_LQRNG_ROTL(state->x[1], 27);
+    uint32_t state_x4 = state->x[0] - MBEDTLS_LQRNG_ROTL(state->x[1], 27);
     state->x[0]       = state->x[1] ^ MBEDTLS_LQRNG_ROTL(state->x[2], 17);
     state->x[1]       = state->x[2] + state->x[3];
-    state->x[2]       = state->x[3] + state_x5;
-    state->x[3]       = state_x5    + state->x[0];
+    state->x[2]       = state->x[3] + state_x4;
+    state->x[3]       = state_x4    + state->x[0];
     return state->x[3];
     #undef MBEDTLS_LQRNG_ROTL
 }
