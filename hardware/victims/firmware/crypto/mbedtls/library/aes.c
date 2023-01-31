@@ -1802,11 +1802,11 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 #define DEBUG_STATE_PRINT(TAS)
 #endif
 
-// extern uint64_t aes_timing_table[32];
 // #define TIMING_INSTR_INIT() \
+//     extern uint64_t aes_timing_table[]; \
 //     uint64_t* tt = aes_timing_table; \
 //     memset(aes_timing_table, 0, sizeof(aes_timing_table));
-#define TIMING_INSTR_INIT() {}
+#define TIMING_INSTR_INIT() { }
 // #define TIMING_INSTR_EDGE() { *(tt++) = __rdtsc(); }
 #define TIMING_INSTR_EDGE() { }
 // #define TIMING_INSTR_NEXT() { *(tt++) = __rdtsc(); }

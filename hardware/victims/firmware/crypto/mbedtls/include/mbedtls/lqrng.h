@@ -40,7 +40,7 @@
 #define MBEDTLS_AES_LQRNG_IMPL_CHACHA8     24
 
 #if !defined(MBEDTLS_AES_LQRNG_IMPL)
-#define MBEDTLS_AES_LQRNG_IMPL MBEDTLS_AES_LQRNG_IMPL_ICHACHA4
+#define MBEDTLS_AES_LQRNG_IMPL MBEDTLS_AES_LQRNG_IMPL_JSF32
 #endif /* MBEDTLS_AES_LQRNG_IMPL */
 
 #ifdef __cplusplus
@@ -262,13 +262,14 @@ static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
 {
     int rem, chk;
     uint8_t *dst = (uint8_t*)&state->x[1];
+    const size_t max_seed_len = 3*sizeof(uint32_t)
     state->x[0] = 0xf1ea5eed;
     if(!seed_len) {
-        memset(dst, 0, 3*sizeof(uint32_t));
+        memset(dst, 0, max_seed_len);
     }
     else {
         // Fill the remainder with seed
-        for( rem = 3*sizeof(uint32_t); rem > 0; rem -= seed_len ){
+        for( rem = max_seed_len; rem > 0; rem -= seed_len ){
             chk = (seed_len < rem) ? seed_len : rem;
             memcpy(dst, seed, chk);
             dst += chk;
