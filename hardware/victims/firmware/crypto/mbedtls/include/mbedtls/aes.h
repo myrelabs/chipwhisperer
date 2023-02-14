@@ -84,8 +84,8 @@
 
 // TODO: move to config
 // #define MBEDTLS_AES_NTH_ORD_MASK
-// #define MBEDTLS_AES_NTH_ORD_MASK_ORDER  2
-// #define MBEDTLS_AES_NTH_ORD_MASK_ROUNDS 2
+// #define MBEDTLS_AES_MASK_ORDER  2
+// #define MBEDTLS_AES_MASK_ROUNDS 2
 // #define MBEDTLS_AES_AFFINE_LOOKUP
 // #define MBEDTLS_AES_MIXCOL_TABLES
 // #define MBEDTLS_AES_CCM_TABLES
@@ -97,22 +97,22 @@
 #if defined(MBEDTLS_AES_NTH_ORD_MASK)
 #include "lqrng.h"
 
-#if !defined(MBEDTLS_AES_NTH_ORD_MASK_ORDER)
-#define MBEDTLS_AES_NTH_ORD_MASK_ORDER  2
-#endif /* MBEDTLS_AES_NTH_ORD_MASK_ORDER */
+#if !defined(MBEDTLS_AES_MASK_ORDER)
+#define MBEDTLS_AES_MASK_ORDER  2
+#endif /* MBEDTLS_AES_MASK_ORDER */
 
-#if !defined(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS)
-#define MBEDTLS_AES_NTH_ORD_MASK_ROUNDS 0
-#endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS */
+#if !defined(MBEDTLS_AES_MASK_ROUNDS)
+#define MBEDTLS_AES_MASK_ROUNDS 0
+#endif /* MBEDTLS_AES_MASK_ROUNDS */
 
-#if !(MBEDTLS_AES_NTH_ORD_MASK_ORDER > 1)
-#error "MBEDTLS_AES_NTH_ORD_MASK_ORDER must be greater than 1"
+#if !(MBEDTLS_AES_MASK_ORDER > 1)
+#error "MBEDTLS_AES_MASK_ORDER must be greater than 1"
 #endif
 
-#if !(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS < 5)
-#error "MBEDTLS_AES_NTH_ORD_MASK_ROUNDS must be lower than 5"
-#elif (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS < 0)
-#error "MBEDTLS_AES_NTH_ORD_MASK_ROUNDS must be non-negative"
+#if !(MBEDTLS_AES_MASK_ROUNDS < 5)
+#error "MBEDTLS_AES_MASK_ROUNDS must be lower than 5"
+#elif (MBEDTLS_AES_MASK_ROUNDS < 0)
+#error "MBEDTLS_AES_MASK_ROUNDS must be non-negative"
 #endif
 
 #endif /* MBEDTLS_AES_NTH_ORD_MASK */
@@ -144,14 +144,14 @@ typedef struct mbedtls_aes_context
     #if defined(MBEDTLS_AES_NTH_ORD_MASK)
     int masked;                 /*!< Masked enabled for this context. */
     uint32_t mrk[               /*!< Masked round key buffer. */
-    #if MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0
-        (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS+1)
+    #if MBEDTLS_AES_MASK_ROUNDS > 0
+        (MBEDTLS_AES_MASK_ROUNDS+1)
         *2
-    #else /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS */
+    #else /* MBEDTLS_AES_MASK_ROUNDS */
         15
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS */
         *4
-        *(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1)
+        *(MBEDTLS_AES_MASK_ORDER-1)
     ];
     mbedtls_lqrng_state lqrng;
     #endif /* MBEDTLS_AES_NTH_ORD_MASK */

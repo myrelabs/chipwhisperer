@@ -262,7 +262,7 @@ static inline void mbedtls_lqrng_init(mbedtls_lqrng_state* state,
 {
     int rem, chk;
     uint8_t *dst = (uint8_t*)&state->x[1];
-    const size_t max_seed_len = 3*sizeof(uint32_t)
+    const size_t max_seed_len = 3*sizeof(uint32_t);
     state->x[0] = 0xf1ea5eed;
     if(!seed_len) {
         memset(dst, 0, max_seed_len);

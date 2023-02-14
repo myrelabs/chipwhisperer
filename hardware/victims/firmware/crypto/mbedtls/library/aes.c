@@ -76,7 +76,7 @@
 #endif /* MBEDTLS_AES_MASKED_FUNCTION_SECTION */
 
     
-#if !defined(MBEDTLS_NO_UNROLL)
+#if !defined(MBEDTLS_AES_NO_UNROLL)
 #if defined(__GNUC__)
 #define UNROLL _Pragma("GCC unroll 16")
 #elif defined(__ARMCC_VERSION)
@@ -85,9 +85,9 @@
 #warning "Loop unrolling not defined for this compiler, the code may be suboptimal."
 #define UNROLL
 #endif
-#else /* MBEDTLS_NO_UNROLL */
+#else /* MBEDTLS_AES_NO_UNROLL */
 #define UNROLL
-#endif /* MBEDTLS_NO_UNROLL */
+#endif /* MBEDTLS_AES_NO_UNROLL */
 
 #endif /* MBEDTLS_AES_NTH_ORD_MASK */
 
@@ -877,34 +877,34 @@ int mbedtls_aes_maskkey( mbedtls_aes_context *ctx )
 {
     int i, j, k;
     uint32_t tmp0, tmp1;
-    uint32_t *mRKs[MBEDTLS_AES_NTH_ORD_MASK_ORDER-1], *RK = ctx->rk;
+    uint32_t *mRKs[MBEDTLS_AES_MASK_ORDER-1], *RK = ctx->rk;
     mbedtls_lqrng_state *LQRNG = &(ctx->lqrng);
 
     if( !ctx->masked )
         return MBEDTLS_ERR_AES_INVALID_CONTEXT;
 
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0)
-    UNROLL for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
-        mRKs[k] = &ctx->mrk[(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS+1) * 2 * 4 * k];
+    #if (MBEDTLS_AES_MASK_ROUNDS > 0)
+    UNROLL for( k = 0; k<MBEDTLS_AES_MASK_ORDER-1; ++k ){
+        mRKs[k] = &ctx->mrk[(MBEDTLS_AES_MASK_ROUNDS+1) * 2 * 4 * k];
     }
-    #else  /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
-    UNROLL for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ){
+    #else  /* MBEDTLS_AES_MASK_ROUNDS > 0 */
+    UNROLL for( k = 0; k<MBEDTLS_AES_MASK_ORDER-1; ++k ){
         mRKs[k] = &ctx->mrk[(ctx->nr+1) * 4 * k];
     }
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS > 0 */
 
     for( i=0; i<(ctx->nr+1); ++i ) {
-        #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0)
-        if( (i > MBEDTLS_AES_NTH_ORD_MASK_ROUNDS) && (i < ctx->nr-MBEDTLS_AES_NTH_ORD_MASK_ROUNDS) )
+        #if (MBEDTLS_AES_MASK_ROUNDS > 0)
+        if( (i > MBEDTLS_AES_MASK_ROUNDS) && (i < ctx->nr-MBEDTLS_AES_MASK_ROUNDS) )
         {
             RK+=4;
         }
         else
-        #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
+        #endif /* MBEDTLS_AES_MASK_ROUNDS > 0 */
         {
             UNROLL for( j=0; j<4; ++j ) {
                 tmp0 = 0;
-                UNROLL for( k = 0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER-1; ++k ) {
+                UNROLL for( k = 0; k<MBEDTLS_AES_MASK_ORDER-1; ++k ) {
                     tmp1 = mbedtls_lqrng_get32(LQRNG);
                     *(mRKs[k]++) ^= tmp0 ^ tmp1;
                     tmp0 = tmp1;
@@ -1208,23 +1208,23 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 
 /*
  * Random bytes:
- * (MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))/2
+ * (MBEDTLS_AES_MASK_ORDER*(MBEDTLS_AES_MASK_ORDER-1))/2
  */
-#define MASKED_SEC_MULT_RANDBYTES ((MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))/2)
+#define MASKED_SEC_MULT_RANDBYTES ((MBEDTLS_AES_MASK_ORDER*(MBEDTLS_AES_MASK_ORDER-1))/2)
 #define MASKED_SEC_MULT(Cs,As,Bs,RB) do {    \
-    uint8_t $r[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER]; \
+    uint8_t $r[MBEDTLS_AES_MASK_ORDER][MBEDTLS_AES_MASK_ORDER]; \
     int $x,$y;                                                                  \
     uint8_t $tmp;                                                               \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
-        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){        \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
+        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_MASK_ORDER; ++$y){        \
             $tmp = *(RB)++;                                                     \
             $r[$x][$y] = gf256_mul(As[$x], Bs[$y]) ^ $tmp;                      \
             $r[$y][$x] = gf256_mul(As[$y], Bs[$x]) ^ $tmp;                      \
         }                                                                       \
     }                                                                           \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         Cs[$x] = gf256_mul(As[$x], Bs[$x]);                                     \
-        UNROLL for( $y = 0; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y ) {         \
+        UNROLL for( $y = 0; $y<MBEDTLS_AES_MASK_ORDER; ++$y ) {         \
             if ($y != $x) {                                                     \
                 Cs[$x] ^= $r[$x][$y];                                           \
             }                                                                   \
@@ -1262,11 +1262,11 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
  *            orignally from https://eprint.iacr.org/2015/506.pdf */
 #if !defined(MBEDTLS_AES_STRICT_REFRESH_MASK)
 
-#define REFRESH_MASK_RANDBYTES (MBEDTLS_AES_NTH_ORD_MASK_ORDER-1)
+#define REFRESH_MASK_RANDBYTES (MBEDTLS_AES_MASK_ORDER-1)
 #define REFRESH_MASK(Xs, RB) do {                                           \
     int $x;                                                                 \
     uint8_t $tmp0 = 0, $tmp1;                                               \
-    UNROLL for( $x = 0; $x<(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1); ++$x ){      \
+    UNROLL for( $x = 0; $x<(MBEDTLS_AES_MASK_ORDER-1); ++$x ){      \
         $tmp1 = *(RB)++;                                                    \
         Xs[$x] ^= $tmp1 ^ $tmp0;                                            \
         $tmp0 = $tmp1;                                                      \
@@ -1276,12 +1276,12 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 
 #else /* MBEDTLS_AES_STRICT_REFRESH_MASK */
 
-#define REFRESH_MASK_RANDBYTES ((MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))/2)
+#define REFRESH_MASK_RANDBYTES ((MBEDTLS_AES_MASK_ORDER*(MBEDTLS_AES_MASK_ORDER-1))/2)
 #define REFRESH_MASK(Xs, RB) do {                                           \
     int $x, $y;                                                             \
     uint8_t $tmp;                                                           \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){          \
-        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y ){   \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){          \
+        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_MASK_ORDER; ++$y ){   \
             $tmp = *(RB)++;                                                 \
             Xs[$x] ^= $tmp;                                                 \
             Xs[$y] ^= $tmp;                                                 \
@@ -1297,31 +1297,31 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 /*
  * Random bytes:
  * (4x MASKED_SEC_MULT)
- * 2*(MBEDTLS_AES_NTH_ORD_MASK_ORDER*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))
+ * 2*(MBEDTLS_AES_MASK_ORDER*(MBEDTLS_AES_MASK_ORDER-1))
  * + 2*REFRESH_MASK
- * So max MBEDTLS_AES_NTH_ORD_MASK_ORDER is 5 with the ChaCha-based LQRNG
+ * So max MBEDTLS_AES_MASK_ORDER is 5 with the ChaCha-based LQRNG
  */
-#define MASKED_EXP254_RANDBYTES (4*MASKED_SEC_MULT_RANDBYTES + 2*(MBEDTLS_AES_NTH_ORD_MASK_ORDER-1))
+#define MASKED_EXP254_RANDBYTES (4*MASKED_SEC_MULT_RANDBYTES + 2*(MBEDTLS_AES_MASK_ORDER-1))
 #define MASKED_EXP254(Ys,Xs,RB) do {                                            \
-    uint8_t $z[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
-            $w[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                                 \
+    uint8_t $z[MBEDTLS_AES_MASK_ORDER],                                 \
+            $w[MBEDTLS_AES_MASK_ORDER];                                 \
     int $x;                                                                     \
     /* zi = Xi^2, z = X^2 */                                                    \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         $z[$x] = gf256_sqr_lu[Xs[$x]];                                          \
     }                                                                           \
     REFRESH_MASK($z, RB);                                                       \
     /* Yi = Xi*zi, Y = X^3 */                                                   \
     MASKED_SEC_MULT(Ys,$z,Xs,RB);                                               \
     /* wi = Yi^4, w = X^12 */                                                   \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         $w[$x] = gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]];                            \
     }                                                                           \
     REFRESH_MASK($w, RB);                                                       \
     /* Yi = Yi*wi, Y = X^15 */                                                  \
     MASKED_SEC_MULT(Ys,Ys,$w,RB);                                               \
     /* Yi = Yi^16, Y = X^240 */                                                 \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         Ys[$x] = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]]]];\
     }                                                                           \
     /* Yi = Yi*wi, Y = X^252 */                                                 \
@@ -1332,14 +1332,14 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 #else /* MBEDTLS_AES_COMMON_MASK */
 /* CommonShare variant of EXP254 from https://eprint.iacr.org/2016/572.pdf */
 
-#define COMMON_SHARES_RANDBYTES (MBEDTLS_AES_NTH_ORD_MASK_ORDER/2)
+#define COMMON_SHARES_RANDBYTES (MBEDTLS_AES_MASK_ORDER/2)
 #define COMMON_SHARES(Xs, Ys, RB) do {                                  \
     int $x;                                                             \
     uint8_t $tmp;                                                       \
-    UNROLL for( $x = 0; $x<(MBEDTLS_AES_NTH_ORD_MASK_ORDER/2); ++$x ){  \
+    UNROLL for( $x = 0; $x<(MBEDTLS_AES_MASK_ORDER/2); ++$x ){  \
         $tmp = *(RB)++;                                                 \
-        Xs[$x + (MBEDTLS_AES_NTH_ORD_MASK_ORDER/2)] ^= $tmp ^ Xs[$x];   \
-        Ys[$x + (MBEDTLS_AES_NTH_ORD_MASK_ORDER/2)] ^= $tmp ^ Ys[$x];   \
+        Xs[$x + (MBEDTLS_AES_MASK_ORDER/2)] ^= $tmp ^ Xs[$x];   \
+        Ys[$x + (MBEDTLS_AES_MASK_ORDER/2)] ^= $tmp ^ Ys[$x];   \
         Xs[$x] = Ys[$x] = $tmp;                                         \
     }                                                                   \
 } while ( 0 )
@@ -1348,26 +1348,26 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 #define COMMON_MULT_RANDBYTES (COMMON_SHARES_RANDBYTES + 2*MASKED_SEC_MULT_RANDBYTES)
 #define COMMON_MULT(Ds, Es, As, Bs, Cs, RB) do { \
     COMMON_SHARES(As, Bs, RB);\
-    uint8_t $md[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER];\
-    uint8_t $me[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER];\
-    uint8_t $rd[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER];\
-    uint8_t $re[MBEDTLS_AES_NTH_ORD_MASK_ORDER][MBEDTLS_AES_NTH_ORD_MASK_ORDER];\
+    uint8_t $md[MBEDTLS_AES_MASK_ORDER][MBEDTLS_AES_MASK_ORDER];\
+    uint8_t $me[MBEDTLS_AES_MASK_ORDER][MBEDTLS_AES_MASK_ORDER];\
+    uint8_t $rd[MBEDTLS_AES_MASK_ORDER][MBEDTLS_AES_MASK_ORDER];\
+    uint8_t $re[MBEDTLS_AES_MASK_ORDER][MBEDTLS_AES_MASK_ORDER];\
     int $x,$y;                                                                  \
     uint8_t $tmp;                                                               \
-    UNROLL for( $x = 0; $x<(MBEDTLS_AES_NTH_ORD_MASK_ORDER/2); ++$x ){          \
-        UNROLL for( $y = $x+1; $y<(MBEDTLS_AES_NTH_ORD_MASK_ORDER/2); ++$y){    \
+    UNROLL for( $x = 0; $x<(MBEDTLS_AES_MASK_ORDER/2); ++$x ){          \
+        UNROLL for( $y = $x+1; $y<(MBEDTLS_AES_MASK_ORDER/2); ++$y){    \
             $md[$x][$y] = $me[$x][$y] = gf256_mul(As[$x], Cs[$y]);              \
             $md[$y][$x] = $me[$y][$x] = gf256_mul(As[$y], Cs[$x]);              \
         }                                                                       \
-        UNROLL for( ; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){                 \
+        UNROLL for( ; $y<MBEDTLS_AES_MASK_ORDER; ++$y){                 \
             $md[$x][$y] = $me[$x][$y] = gf256_mul(As[$x], Cs[$y]);              \
             $md[$y][$x] = gf256_mul(As[$y], Cs[$x]);                            \
             $me[$y][$x] = gf256_mul(Bs[$y], Cs[$x]);                            \
         }                                                                       \
         $md[$x][$x] = $me[$x][$x] = gf256_mul(As[$x], Cs[$x]);                  \
     }                                                                           \
-    UNROLL for( ; $x<(MBEDTLS_AES_NTH_ORD_MASK_ORDER); ++$x ){                  \
-        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){        \
+    UNROLL for( ; $x<(MBEDTLS_AES_MASK_ORDER); ++$x ){                  \
+        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_MASK_ORDER; ++$y){        \
             $md[$x][$y] = gf256_mul(As[$x], Cs[$y]);                            \
             $me[$x][$y] = gf256_mul(Bs[$x], Cs[$y]);                            \
             $md[$y][$x] = gf256_mul(As[$y], Cs[$x]);                            \
@@ -1376,8 +1376,8 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
         $md[$x][$x] = gf256_mul(As[$x], Cs[$x]);                                \
         $me[$x][$x] = gf256_mul(Bs[$x], Cs[$x]);                                \
     }                                                                           \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
-        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y){        \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
+        UNROLL for( $y = $x+1; $y<MBEDTLS_AES_MASK_ORDER; ++$y){        \
             $tmp = *(RB)++;                                                     \
             $rd[$x][$y] = $md[$x][$y] ^ $tmp;                                   \
             $rd[$y][$x] = $md[$y][$x] ^ $tmp;                                   \
@@ -1386,10 +1386,10 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
             $re[$y][$x] = $me[$y][$x] ^ $tmp;                                   \
         }                                                                       \
     }                                                                           \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         Ds[$x] = $md[$x][$x];                                                   \
         Es[$x] = $me[$x][$x];                                                   \
-        UNROLL for( $y = 0; $y<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$y ) {         \
+        UNROLL for( $y = 0; $y<MBEDTLS_AES_MASK_ORDER; ++$y ) {         \
             if ($y != $x) {                                                     \
                 Ds[$x] ^= $rd[$x][$y];                                          \
                 Es[$x] ^= $re[$x][$y];                                          \
@@ -1400,18 +1400,18 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 
 #define MASKED_EXP254_RANDBYTES (2*REFRESH_MASK_RANDBYTES + 2*MASKED_SEC_MULT_RANDBYTES + COMMON_MULT_RANDBYTES)
 #define MASKED_EXP254(Ys,Xs,RB) do {                                            \
-    uint8_t $z[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                                 \
-            $w[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                                 \
+    uint8_t $z[MBEDTLS_AES_MASK_ORDER],                                 \
+            $w[MBEDTLS_AES_MASK_ORDER];                                 \
     int $x;                                                                     \
     /* zi = Xi^2, z = X^2 */                                                    \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         $z[$x] = gf256_sqr_lu[Xs[$x]];                                          \
     }                                                                           \
     REFRESH_MASK($z, RB);                                                       \
     /* Yi = Xi*zi, Y = X^3 */                                                   \
     MASKED_SEC_MULT(Ys,$z,Xs, RB);                                              \
     /* wi = Yi^4, w = X^12 */                                                   \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         $w[$x] = gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]];                            \
     }                                                                           \
     REFRESH_MASK($w, RB);                                                       \
@@ -1419,7 +1419,7 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
     /* Yi = Yi*wi, Y = X^15 */                                                  \
     COMMON_MULT($z,Ys,$z,Ys,$w,RB);                                             \
     /* Yi = Yi^16, Y = X^240 */                                                 \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){              \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){              \
         Ys[$x] = gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[gf256_sqr_lu[Ys[$x]]]]];\
     }                                                                           \
     /* Yi = Yi*zi, Y = X^254 */                                                 \
@@ -1430,29 +1430,29 @@ int mbedtls_aes_xts_setkey_dec( mbedtls_aes_xts_context *ctx,
 
 MBEDTLS_AES_MASKED_FUNCTION_ATTRIBUTES(_aes_masked_fsbox)
 static void _aes_masked_fsbox(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
-                              uint8_t out[MBEDTLS_AES_NTH_ORD_MASK_ORDER],
-                              uint8_t in[MBEDTLS_AES_NTH_ORD_MASK_ORDER])
+                              uint8_t out[MBEDTLS_AES_MASK_ORDER],
+                              uint8_t in[MBEDTLS_AES_MASK_ORDER])
 {
     int x;
     const uint8_t *RB = rbs;
     MASKED_EXP254(out, in, RB);
-    UNROLL for( x = 0; x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++x ){
+    UNROLL for( x = 0; x<MBEDTLS_AES_MASK_ORDER; ++x ){
         AES_AFFINE(out[x]);
     }
-    if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { out[0] ^= 0x63; }
+    if(!(MBEDTLS_AES_MASK_ORDER & 1)) { out[0] ^= 0x63; }
 }
 
 MBEDTLS_AES_MASKED_FUNCTION_ATTRIBUTES(_aes_masked_rsbox)
 static void _aes_masked_rsbox(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
-                              uint8_t out[MBEDTLS_AES_NTH_ORD_MASK_ORDER],
-                              uint8_t in[MBEDTLS_AES_NTH_ORD_MASK_ORDER])
+                              uint8_t out[MBEDTLS_AES_MASK_ORDER],
+                              uint8_t in[MBEDTLS_AES_MASK_ORDER])
 {
     int x;
     const uint8_t *RB = rbs;
-    UNROLL for( x = 0; x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++x ){
+    UNROLL for( x = 0; x<MBEDTLS_AES_MASK_ORDER; ++x ){
         AES_IAFFINE(in[x]);
     }
-    if(!(MBEDTLS_AES_NTH_ORD_MASK_ORDER & 1)) { in[0] ^= 0x05; }
+    if(!(MBEDTLS_AES_MASK_ORDER & 1)) { in[0] ^= 0x05; }
     MASKED_EXP254(out, in, RB);
 }
 
@@ -1521,26 +1521,26 @@ static void _aes_masked_rsbox(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
 
 #define AES_MASKED_FTx(x,Xs,Ys,i) do {                                  \
     int $x;                                                             \
-    uint8_t $sb[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                        \
-            $yv[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                        \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){      \
+    uint8_t $sb[MBEDTLS_AES_MASK_ORDER],                        \
+            $yv[MBEDTLS_AES_MASK_ORDER];                        \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){      \
         $yv[$x] = ((Ys[$x]) >> ((i)*8)) & 0xFF;                         \
     }                                                                   \
     MASKED_FSBOX($sb, $yv);                                             \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){      \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){      \
         Xs[$x] ^= AES_MC##x($sb[$x]);                                   \
     }                                                                   \
 } while ( 0 )
 
 #define AES_MASKED_RTx(x,Xs,Ys,i) do {                                  \
     int $x;                                                             \
-    uint8_t $sb[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                        \
-            $yv[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                        \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){      \
+    uint8_t $sb[MBEDTLS_AES_MASK_ORDER],                        \
+            $yv[MBEDTLS_AES_MASK_ORDER];                        \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){      \
         $yv[$x] = ((Ys[$x]) >> ((i)*8)) & 0xFF;                         \
     }                                                                   \
     MASKED_RSBOX($sb, $yv);                                             \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){      \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){      \
         Xs[$x] ^= AES_IMC##x($sb[$x]);                                  \
     }                                                                   \
 } while ( 0 )
@@ -1548,7 +1548,7 @@ static void _aes_masked_rsbox(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
 #define AES_MASKED_FSUBROUND(Xs,mRKs,Y0s,Y1s,Y2s,Y3s)                       \
     do {                                                                    \
         int $x;                                                             \
-        UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){      \
+        UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){      \
             Xs[$x] = *mRKs[$x]++;                                           \
         }                                                                   \
         AES_MASKED_FTx(0, Xs, Y0s, 0);                                      \
@@ -1560,7 +1560,7 @@ static void _aes_masked_rsbox(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
 #define AES_MASKED_RSUBROUND(Xs,mRKs,Y0s,Y1s,Y2s,Y3s)                       \
     do {                                                                    \
         int $x;                                                             \
-        UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){      \
+        UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){      \
             Xs[$x] = *mRKs[$x]++;                                           \
         }                                                                   \
         AES_MASKED_RTx(0, Xs, Y0s, 0);                                      \
@@ -1569,11 +1569,11 @@ static void _aes_masked_rsbox(const uint8_t rbs[MASKED_EXP254_RANDBYTES],
         AES_MASKED_RTx(3, Xs, Y3s, 3);                                      \
     } while ( 0 )
 
-#if defined(MBEDTLS_UNINLINE_MASKED_ROUND)
+#if defined(MBEDTLS_AES_UNINLINE_MASKED_ROUND)
 MBEDTLS_AES_MASKED_FUNCTION_ATTRIBUTES(_aes_masked_fround)
 static void _aes_masked_fround(mbedtls_lqrng_state *LQRNG,
-                               uint32_t Xss[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER], uint32_t Yss[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER], 
-                               uint32_t *mRKs[MBEDTLS_AES_NTH_ORD_MASK_ORDER])
+                               uint32_t Xss[4][MBEDTLS_AES_MASK_ORDER], uint32_t Yss[4][MBEDTLS_AES_MASK_ORDER], 
+                               uint32_t *mRKs[MBEDTLS_AES_MASK_ORDER])
 {
     AES_MASKED_FSUBROUND(Xss[0],mRKs,Yss[0],Yss[1],Yss[2],Yss[3]);
     AES_MASKED_FSUBROUND(Xss[1],mRKs,Yss[1],Yss[2],Yss[3],Yss[0]);
@@ -1583,8 +1583,8 @@ static void _aes_masked_fround(mbedtls_lqrng_state *LQRNG,
 
 MBEDTLS_AES_MASKED_FUNCTION_ATTRIBUTES(_aes_masked_rround)
 static void _aes_masked_rround(mbedtls_lqrng_state *LQRNG,
-                               uint32_t Xss[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER], uint32_t Yss[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER], 
-                               uint32_t *mRKs[MBEDTLS_AES_NTH_ORD_MASK_ORDER])
+                               uint32_t Xss[4][MBEDTLS_AES_MASK_ORDER], uint32_t Yss[4][MBEDTLS_AES_MASK_ORDER], 
+                               uint32_t *mRKs[MBEDTLS_AES_MASK_ORDER])
 {
     AES_MASKED_RSUBROUND(Xss[0],mRKs,Yss[0],Yss[1],Yss[2],Yss[3]);
     AES_MASKED_RSUBROUND(Xss[1],mRKs,Yss[1],Yss[2],Yss[3],Yss[0]);
@@ -1598,7 +1598,7 @@ static void _aes_masked_rround(mbedtls_lqrng_state *LQRNG,
 #define AES_MASKED_RROUND(Xss, Yss, mRKs)               \
     do { _aes_masked_rround(LQRNG, Xss, Yss, mRKs); } while ( 0 )
 
-#else /* MBEDTLS_UNINLINE_MASKED_ROUND */
+#else /* MBEDTLS_AES_UNINLINE_MASKED_ROUND */
 
 #define AES_MASKED_FROUND(Xss, Yss, mRKs)               \
     do {                                                    \
@@ -1623,30 +1623,30 @@ static void _aes_masked_rround(mbedtls_lqrng_state *LQRNG,
         AES_MASKED_RSUBROUND(Xss[3],mRKs,                \
                              Yss[3],Yss[2],Yss[1],Yss[0]);  \
     } while ( 0 )
-#endif /* MBEDTLS_UNINLINE_MASKED_ROUND */
+#endif /* MBEDTLS_AES_UNINLINE_MASKED_ROUND */
 
 #define AES_MASKED_FINAL_FSb(Xs,Ys,i) do {                              \
     int $x;                                                             \
-    uint8_t $sb[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                        \
-            $yv[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                        \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+    uint8_t $sb[MBEDTLS_AES_MASK_ORDER],                        \
+            $yv[MBEDTLS_AES_MASK_ORDER];                        \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){ \
         $yv[$x] = ((Ys[$x]) >> ((i)*8)) & 0xFF;                         \
     }                                                                   \
     MASKED_FSBOX($sb, $yv);                                              \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){ \
         (Xs[$x]) ^= (uint32_t)($sb[$x]) << ((i)*8);                     \
     }                                                                   \
 } while ( 0 )
 
 #define AES_MASKED_FINAL_RSb(Xs,Ys,i) do {                              \
     int $x;                                                             \
-    uint8_t $sb[MBEDTLS_AES_NTH_ORD_MASK_ORDER],                        \
-            $yv[MBEDTLS_AES_NTH_ORD_MASK_ORDER];                        \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+    uint8_t $sb[MBEDTLS_AES_MASK_ORDER],                        \
+            $yv[MBEDTLS_AES_MASK_ORDER];                        \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){ \
         $yv[$x] = ((Ys[$x]) >> ((i)*8)) & 0xFF;                         \
     }                                                                   \
     MASKED_RSBOX($sb, $yv);                                              \
-    UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+    UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){ \
         (Xs[$x]) ^= (uint32_t)($sb[$x]) << ((i)*8);                     \
     }                                                                   \
 } while ( 0 )
@@ -1654,7 +1654,7 @@ static void _aes_masked_rround(mbedtls_lqrng_state *LQRNG,
 #define AES_MASKED_FINAL_FSUBROUND(Xs,mRKs,Y0s,Y1s,Y2s,Y3s )             \
     do {                                                                    \
         int $x;                                                             \
-        UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+        UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){ \
             Xs[$x] = *mRKs[$x]++;                                         \
         }                                                                   \
         AES_MASKED_FINAL_FSb(Xs,Y0s,0);                                     \
@@ -1666,7 +1666,7 @@ static void _aes_masked_rround(mbedtls_lqrng_state *LQRNG,
 #define AES_MASKED_FINAL_RSUBROUND(Xs,mRKs,Y0s,Y1s,Y2s,Y3s )             \
     do {                                                                    \
         int $x;                                                             \
-        UNROLL for( $x = 0; $x<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++$x ){ \
+        UNROLL for( $x = 0; $x<MBEDTLS_AES_MASK_ORDER; ++$x ){ \
             Xs[$x] = *mRKs[$x]++;                                         \
         }                                                                   \
         AES_MASKED_FINAL_RSb(Xs,Y0s,0);                                     \
@@ -1792,7 +1792,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
 #if 0
 #define DEBUG_STATE_PRINT(TAS) do { \
     uint32_t $s[4]; memset($s, 0, sizeof($s)); \
-    for(k=0; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k) { \
+    for(k=0; k<MBEDTLS_AES_MASK_ORDER; ++k) { \
         printf(#TAS "%d %08x %08x %08x %08x\n", k, TAS[0][k], TAS[1][k], TAS[2][k], TAS[3][k]); \
         $s[0] ^= TAS[0][k]; $s[1] ^= TAS[1][k]; $s[2] ^= TAS[2][k]; $s[3] ^= TAS[3][k]; \
     } \
@@ -1826,30 +1826,30 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
     uint32_t tmp0, tmp1;
     struct
     {
-        uint32_t X[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
-        uint32_t Y[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
+        uint32_t X[4][MBEDTLS_AES_MASK_ORDER];
+        uint32_t Y[4][MBEDTLS_AES_MASK_ORDER];
     } t;
-    uint32_t *mRKs[MBEDTLS_AES_NTH_ORD_MASK_ORDER];
+    uint32_t *mRKs[MBEDTLS_AES_MASK_ORDER];
     mbedtls_lqrng_state *LQRNG = &(ctx->lqrng);
 
     TIMING_INSTR_INIT();
     TIMING_INSTR_EDGE();
 
     mRKs[0] = RK;
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0)
-    UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
-        mRKs[k] = &ctx->mrk[(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS+1) * 2 * 4 * (k-1)];
+    #if (MBEDTLS_AES_MASK_ROUNDS > 0)
+    UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
+        mRKs[k] = &ctx->mrk[(MBEDTLS_AES_MASK_ROUNDS+1) * 2 * 4 * (k-1)];
     }
-    #else  /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
-    UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+    #else  /* MBEDTLS_AES_MASK_ROUNDS > 0 */
+    UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
         mRKs[k] = &ctx->mrk[(ctx->nr+1) * 4 * (k-1)];
     }
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS > 0 */
 
     UNROLL for( j=0; j<4; ++j)
     {
         tmp0 = 0;
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             tmp1 = mbedtls_lqrng_get32(LQRNG);
             t.X[j][k] = tmp0 ^ tmp1 ^ *(mRKs[k]++);
             tmp0 = tmp1;
@@ -1860,7 +1860,7 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
 
     TIMING_INSTR_NEXT();
 
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 0)
+    #if (MBEDTLS_AES_MASK_ROUNDS == 0)
     /* Case 0: all rounds are masked */
     DEBUG_STATE_PRINT(t.X);
     AES_MASKED_FROUND(t.Y, t.X, mRKs);
@@ -1875,37 +1875,37 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
         TIMING_INSTR_NEXT();
         DEBUG_STATE_PRINT(t.Y);
     }
-    #else /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 0 */
-    for( i = ( MBEDTLS_AES_NTH_ORD_MASK_ROUNDS >> 1 ); i > 0; i-- )
+    #else /* MBEDTLS_AES_MASK_ROUNDS == 0 */
+    for( i = ( MBEDTLS_AES_MASK_ROUNDS >> 1 ); i > 0; i-- )
     {
         AES_MASKED_FROUND(t.Y, t.X, mRKs);
         TIMING_INSTR_NEXT();
         AES_MASKED_FROUND(t.X, t.Y, mRKs);
         TIMING_INSTR_NEXT();
     }
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1)
+    #if (MBEDTLS_AES_MASK_ROUNDS & 1)
     /* Case 2n+1: odd number of rounds at the beginning */
     /* Extra odd round to equalize w/ the common path */
     AES_MASKED_FROUND(t.Y, t.X, mRKs);
     TIMING_INSTR_NEXT();
     #define TSA t.Y
     #define TSB t.X
-    #else  /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1 */
+    #else  /* MBEDTLS_AES_MASK_ROUNDS & 1 */
     /* Case 2n: even number of rounds at the beginning */
     #define TSA t.X
     #define TSB t.Y
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS & 1 */
 
     /* Unmask current state*/
     UNROLL for(i=0;i<4;++i) {
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             TSA[i][0] ^= TSA[i][k];
         }
     }
 
     /* Unmasked rounds */
     RK = mRKs[0];
-    for( i = ( ctx->nr >> 1 ) - MBEDTLS_AES_NTH_ORD_MASK_ROUNDS; i > 0; i-- )
+    for( i = ( ctx->nr >> 1 ) - MBEDTLS_AES_MASK_ROUNDS; i > 0; i-- )
     {
         AES_FROUND( TSB[0][0], TSB[1][0], TSB[2][0], TSB[3][0], TSA[0][0], TSA[1][0], TSA[2][0], TSA[3][0] );
         AES_FROUND( TSA[0][0], TSA[1][0], TSA[2][0], TSA[3][0], TSB[0][0], TSB[1][0], TSB[2][0], TSB[3][0] );
@@ -1920,7 +1920,7 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
         /* mRKs[0] has already been xored into state,
          * but the remaining shares need to be applied. */
         tmp0 = 0;
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             tmp1 = mbedtls_lqrng_get32(LQRNG);
             TSA[i][k] = tmp0 ^ tmp1 ^ *(mRKs[k]++);
             tmp0 = tmp1;
@@ -1929,16 +1929,16 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
     }
     TIMING_INSTR_NEXT();
 
-    #if !(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1)
+    #if !(MBEDTLS_AES_MASK_ROUNDS & 1)
     /* Extra odd round to equalize w/ the common path */
     AES_MASKED_FROUND(t.Y, TSA, mRKs);
     TIMING_INSTR_NEXT();
-    #endif /* !(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1) */
+    #endif /* !(MBEDTLS_AES_MASK_ROUNDS & 1) */
 
     #undef TSA
     #undef TSB
 
-    for( i = ( (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS - 1) >> 1 ); i > 0; i-- )
+    for( i = ( (MBEDTLS_AES_MASK_ROUNDS - 1) >> 1 ); i > 0; i-- )
     {
         AES_MASKED_FROUND(t.X, t.Y, mRKs);
         TIMING_INSTR_NEXT();
@@ -1946,7 +1946,7 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
         TIMING_INSTR_NEXT();
     }
 
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 0 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS == 0 */
 
     AES_MASKED_FINAL_FSUBROUND(t.X[0], mRKs, t.Y[0], t.Y[1], t.Y[2], t.Y[3]);
     AES_MASKED_FINAL_FSUBROUND(t.X[1], mRKs, t.Y[1], t.Y[2], t.Y[3], t.Y[0]);
@@ -1958,7 +1958,7 @@ int mbedtls_masked_aes_encrypt( mbedtls_aes_context *ctx,
 
     /* Unmask output */
     UNROLL for(i=0;i<4;++i) {
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             t.X[i][0] ^= t.X[i][k];
         }
     }
@@ -2065,27 +2065,27 @@ int mbedtls_masked_aes_decrypt( mbedtls_aes_context *ctx,
     uint32_t tmp0, tmp1;
     struct
     {
-        uint32_t X[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
-        uint32_t Y[4][MBEDTLS_AES_NTH_ORD_MASK_ORDER];
+        uint32_t X[4][MBEDTLS_AES_MASK_ORDER];
+        uint32_t Y[4][MBEDTLS_AES_MASK_ORDER];
     } t;
-    uint32_t *mRKs[MBEDTLS_AES_NTH_ORD_MASK_ORDER];
+    uint32_t *mRKs[MBEDTLS_AES_MASK_ORDER];
     mbedtls_lqrng_state *LQRNG = &(ctx->lqrng);
 
     mRKs[0] = RK;
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0)
-    UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
-        mRKs[k] = &ctx->mrk[(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS+1) * 2 * 4 * (k-1)];
+    #if (MBEDTLS_AES_MASK_ROUNDS > 0)
+    UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
+        mRKs[k] = &ctx->mrk[(MBEDTLS_AES_MASK_ROUNDS+1) * 2 * 4 * (k-1)];
     }
-    #else  /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
-    UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+    #else  /* MBEDTLS_AES_MASK_ROUNDS > 0 */
+    UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
         mRKs[k] = &ctx->mrk[(ctx->nr+1) * 4 * (k-1)];
     }
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS > 0 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS > 0 */
 
     UNROLL for( j=0; j<4; ++j)
     {
         tmp0 = 0;
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             tmp1 = mbedtls_lqrng_get32(LQRNG);
             t.X[j][k] = tmp0 ^ tmp1 ^ *(mRKs[k-1]++);
             tmp0 = tmp1;
@@ -2094,7 +2094,7 @@ int mbedtls_masked_aes_decrypt( mbedtls_aes_context *ctx,
         t.X[j][0] ^= (tmp0 ^ *(RK++));
     }
 
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 0)
+    #if (MBEDTLS_AES_MASK_ROUNDS == 0)
     /* Case 0: all rounds are masked */
     AES_MASKED_RROUND(t.Y, t.X, mRKs);
     for( i = ( ctx->nr >> 1 ) - 1; i > 0; i-- )
@@ -2102,34 +2102,34 @@ int mbedtls_masked_aes_decrypt( mbedtls_aes_context *ctx,
         AES_MASKED_RROUND(t.X, t.Y, mRKs);
         AES_MASKED_RROUND(t.Y, t.X, mRKs);
     }
-    #else /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 0 */
-    for( i = ( MBEDTLS_AES_NTH_ORD_MASK_ROUNDS >> 1 ); i > 0; i-- )
+    #else /* MBEDTLS_AES_MASK_ROUNDS == 0 */
+    for( i = ( MBEDTLS_AES_MASK_ROUNDS >> 1 ); i > 0; i-- )
     {
         AES_MASKED_RROUND(t.Y, t.X, mRKs);
         AES_MASKED_RROUND(t.X, t.Y, mRKs);
     }
-    #if (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1)
+    #if (MBEDTLS_AES_MASK_ROUNDS & 1)
     /* Case 2n+1: odd number of rounds at the beginning */
     /* Extra odd round to equalize w/ the common path */
     AES_MASKED_RROUND(t.Y, t.X, mRKs);
     #define TSA t.Y
     #define TSB t.X
-    #else  /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1 */
+    #else  /* MBEDTLS_AES_MASK_ROUNDS & 1 */
     /* Case 2n: even number of rounds at the beginning */
     #define TSA t.X
     #define TSB t.Y
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS & 1 */
 
     /* Unmask current state*/
     UNROLL for(i=0;i<4;++i) {
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             TSA[i][0] ^= TSA[i][k];
         }
     }
 
     /* Unmasked rounds */
     RK = mRKs[0];
-    for( i = ( ctx->nr >> 1 ) - MBEDTLS_AES_NTH_ORD_MASK_ROUNDS; i > 0; i-- )
+    for( i = ( ctx->nr >> 1 ) - MBEDTLS_AES_MASK_ROUNDS; i > 0; i-- )
     {
         AES_RROUND( TSB[0][0], TSB[1][0], TSB[2][0], TSB[3][0], TSA[0][0], TSA[1][0], TSA[2][0], TSA[3][0] );
         AES_RROUND( TSA[0][0], TSA[1][0], TSA[2][0], TSA[3][0], TSB[0][0], TSB[1][0], TSB[2][0], TSB[3][0] );
@@ -2142,7 +2142,7 @@ int mbedtls_masked_aes_decrypt( mbedtls_aes_context *ctx,
         /* mRKs[0] has already been xored into state,
          * but the remaining shares need to be applied. */
         tmp0 = 0;
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             tmp1 = mbedtls_lqrng_get32(LQRNG);
             TSA[i][k] = tmp0 ^ tmp1 ^ *(mRKs[k]++);
             tmp0 = tmp1;
@@ -2150,21 +2150,21 @@ int mbedtls_masked_aes_decrypt( mbedtls_aes_context *ctx,
         TSA[i][0] ^= tmp0;
     }
 
-    #if !(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1)
+    #if !(MBEDTLS_AES_MASK_ROUNDS & 1)
     /* Extra odd round to equalize w/ the common path */
     AES_MASKED_RROUND(t.Y, TSA, mRKs);
-    #endif /* !(MBEDTLS_AES_NTH_ORD_MASK_ROUNDS & 1) */
+    #endif /* !(MBEDTLS_AES_MASK_ROUNDS & 1) */
 
     #undef TSA
     #undef TSB
 
-    for( i = ( (MBEDTLS_AES_NTH_ORD_MASK_ROUNDS - 1) >> 1 ); i > 0; i-- )
+    for( i = ( (MBEDTLS_AES_MASK_ROUNDS - 1) >> 1 ); i > 0; i-- )
     {
         AES_MASKED_RROUND(t.X, t.Y, mRKs);
         AES_MASKED_RROUND(t.Y, t.X, mRKs);
     }
 
-    #endif /* MBEDTLS_AES_NTH_ORD_MASK_ROUNDS == 0 */
+    #endif /* MBEDTLS_AES_MASK_ROUNDS == 0 */
 
     AES_MASKED_FINAL_RSUBROUND(t.X[0], mRKs, t.Y[0], t.Y[3], t.Y[2], t.Y[1]);
     AES_MASKED_FINAL_RSUBROUND(t.X[1], mRKs, t.Y[1], t.Y[0], t.Y[3], t.Y[2]);
@@ -2173,7 +2173,7 @@ int mbedtls_masked_aes_decrypt( mbedtls_aes_context *ctx,
 
     /* Unmask output */
     UNROLL for(i=0;i<4;++i) {
-        UNROLL for( k = 1; k<MBEDTLS_AES_NTH_ORD_MASK_ORDER; ++k ){
+        UNROLL for( k = 1; k<MBEDTLS_AES_MASK_ORDER; ++k ){
             t.X[i][0] ^= t.X[i][k];
         }
     }
